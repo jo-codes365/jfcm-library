@@ -118,6 +118,7 @@ def get_db():
             password=os.getenv("MYSQLPASSWORD"),
             database=os.getenv("MYSQLDATABASE"),
             autocommit=False,
+            )
         )
     return g.db
 
