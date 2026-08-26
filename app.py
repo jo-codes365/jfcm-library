@@ -42,6 +42,7 @@ SESSION_LAST_ACTIVITY_KEY = "last_activity_at"
 UPLOAD_FOLDER = Path(os.getenv("UPLOAD_FOLDER", "uploads"))
 if not UPLOAD_FOLDER.is_absolute():
     UPLOAD_FOLDER = BASE_DIR / UPLOAD_FOLDER
+UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
 
 app = Flask(__name__)
 app.config.update(
