@@ -324,7 +324,7 @@
               <p>{{ total_files }} item{% if total_files != 1 %}s{% endif %}</p>
             </div> -->
             <div class="table-wrap">
-              <table class="file-table" data-workspace="{{ section }}" data-recent-view="{{ 'true' if section == 'recent' else 'false' }}">
+              <table class="file-table" data-workspace="{{ section }}" data-recent-view="{{ 'true' if section == 'recent' else 'false' }}" data-public-workspace="{{ 'true' if is_public_workspace else 'false' }}">
                 <thead>
                   <tr>
                     {% if not is_public_workspace and not is_shared_listing %}<th><input id="select-all" type="checkbox" aria-label="Select all"></th>{% endif %}
