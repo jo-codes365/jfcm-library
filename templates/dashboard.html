@@ -1,0 +1,619 @@
+{% extends "base.html" %}
+{% block title %}{{ page_title }} | JFCM Pantry{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.3.0/font/bootstrap-icons.css">
+
+<div class="storage-shell">
+  <aside class="sidebar"> 
+    <a class="brand sidebar-brand" href="{{ url_for('index') }}">
+      <img src="{{ url_for('static', filename='images/JF.png') }}" alt="JFCM Pila" class="brand-logo">
+      JFCM Pantry
+    </a>
+    {% if is_public_workspace %}
+    <nav class="sidebar-nav">
+      <a class="sidebar-link active" href="{{ url_for('dashboard') }}"><i class="bi bi-file-earmark-arrow-up"></i>Public Files</a>
+    </nav>
+    <div class="sidebar-footer">
+      <a class="sidebar-link secondary" href="{{ url_for('login') }}"><i class="bi bi-box-arrow-in-right"></i> Sign In</a>
+      <a class="sidebar-link" href="{{ url_for('register') }}"><i class="bi bi-person-plus"></i> Sign Up</a>
+    </div>
+    {% else %}
+    {% if not is_shared_workspace %}
+    <button id="new-menu-button" class="button new new-button" type="button"><i class="bi bi-plus" style="font-size: 2rem;"></i> New</button>
+    <div id="new-menu" class="new-menu" hidden>
+      {% if not is_event_date_workspace %}
+      <button id="new-folder-button" class="menu-action" type="button"><i class="bi bi-folder"></i> New folder</button>
+      {% endif %}
+      <button id="new-event-button" class="menu-action" type="button"><i class="bi bi-plus-lg"></i> New Event</button>
+      {% if not is_event_date_workspace %}
+      <hr style="width: 93%; margin: 4px auto; background-color: #ccc; border: 0; height: 1px; display: block;">
+      <button id="upload-folder-menu-action" class="menu-action" type="button"><i class="bi bi-folder-plus"></i> Upload folder</button>
+      <button id="upload-menu-action" class="menu-action" type="button"><i class="bi bi-upload"></i> Upload files</button>
+      {% endif %}
+    </div>
+    {% endif %}
+    <nav class="sidebar-nav">
+      <a class="sidebar-link {% if section == 'files' %}active{% endif %}" href="{{ url_for('shared_folder', share_token=share_context.token) if is_shared_workspace and share_context.kind == 'folder' else url_for('shared_event', share_token=share_context.token) if is_shared_workspace and share_context.kind == 'event' else url_for('dashboard') }}"><i class="bi bi-file-earmark-arrow-up"></i>{{ 'Shared folder' if is_shared_workspace and share_context.kind == 'folder' else 'Shared Event' if is_shared_workspace and share_context.kind == 'event' else 'My Files' }}</a>
+      {% if not is_shared_workspace %}
+      <a class="sidebar-link {% if section == 'shared' %}active{% endif %}" href="{{ url_for('dashboard', section='shared') }}"><i class="bi bi-people"></i>Shared with me</a>
+      <hr style="width: 100%; margin: 3px 0; background-color: #cbd2dc; size: 0.5px;">
+      <a class="sidebar-link {% if section == 'recent' %}active{% endif %}" href="{{ url_for('dashboard', section='recent') }}"><i class="bi bi-clock"></i>Recent</a>
+      <a class="sidebar-link starred {% if section == 'starred' %}active{% endif %}" href="{{ url_for('dashboard', section='starred') }}"><i class="bi bi-star"></i>Starred</a>
+      <hr style="width: 100%; margin: 3px 0; background-color: #cbd2dc; size: 0.5px;">
+      <div class="sidebar-events">
+        <div class="sidebar-link sidebar-event-parent {% if section == 'events' and not event_id and not is_event_date_workspace %}active{% endif %}">
+          <a class="sidebar-event-link" href="{{ url_for('dashboard', section='events') }}"><i class="bi bi-calendar-date"></i>Events</a>
+          <button id="events-toggle" class="sidebar-event-toggle" type="button" aria-label="Toggle Events submenu" aria-expanded="true" aria-controls="events-submenu"><i class="bi bi-caret-right-fill sidebar-event-caret" aria-hidden="true"></i></button>
+        </div>
+        <div id="events-submenu" class="events-submenu">
+          {% for event in sidebar_events %}
+          <a class="sidebar-link events-sublink {% if section == 'events' and event_id == event.id %}active{% endif %}" href="{{ url_for('dashboard', section='events', event=event.id) }}">{{ display_name(event.name) }}</a>
+          {% else %}
+          <span class="sidebar-link events-sublink muted">No events yet</span>
+          {% endfor %}
+        </div>
+      </div>
+      <hr style="width: 100%; margin: 3px 0; background-color: #cbd2dc; size: 0.5px;">
+      <a class="trash sidebar-link {% if section == 'trash' %}active{% endif %}" style="margin-top: 0px;" href="{{ url_for('dashboard', section='trash') }}"><i class="bi bi-trash3"></i>Trash</a>
+      {% endif %}
+    </nav>
+    <div class="sidebar-footer">
+      <div class="storage-summary">
+        <span>Storage used</span>
+        <strong>{{ readable_size(total_storage) }}</strong>
+      </div>
+      <a id="logout-link" class="sidebar-link trash" href="{{ url_for('logout') }}"><i class="bi bi-box-arrow-right"></i> Sign out</a>
+    </div>
+    {% endif %}
+  </aside>
+  <main class="workspace">
+    <header class="workspace-header">
+      <label class="global-search" for="file-search">
+        <span class="search-label"><i class="bi bi-search"></i></span>
+        <input id="file-search" type="search" value="{{ search_query }}" placeholder="Search files and folders..." aria-label="Search all files and folders" autocomplete="off">
+        <button id="global-search-clear" class="global-search-clear" type="button" aria-label="Clear search" title="Clear search" hidden><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+      </label>
+      {% if is_public_workspace %}
+      <nav class="workspace-header-auth" aria-label="Account actions">
+        <a class="button primary" href="{{ url_for('login') }}">Sign In</a>
+        <a class="button secondary" href="{{ url_for('register') }}">Sign Up</a>
+      </nav>
+      {% elif not is_shared_listing %}
+      <button id="events-calendar-button" class="button secondary events-calendar-button" type="button" aria-haspopup="dialog" aria-controls="events-calendar-modal" aria-expanded="false" title="Events Calendar"><i class="bi bi-calendar-date" aria-hidden="true"></i></button>
+      {% endif %}
+      <!-- profile dropdown to display edit profile, sign out... -->
+    </header>
+    <div class="workspace-body">
+      <div class="workspace-content" data-drop-enabled="{{ 'true' if not is_trash and not is_public_workspace and not is_shared_listing else 'false' }}">
+        <section class="workspace-title">
+          {% if not is_public_workspace and not is_shared_listing %}<section id="bulk-toolbar" class="bulk-toolbar" hidden>
+            <button id="clear-bulk-selection" class="bulk-selection-clear" type="button" aria-label="Clear selected items" title="Clear selection"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+            <strong id="selected-count">0 items selected</strong>
+            {% if not is_trash %}
+            <button class="row-action download-action" type="button" data-action="/items/download" aria-label="Download selected items" title="Download selected items"><i class="bi bi-download" aria-hidden="true"></i></button>
+            <button id="bulk-star-action" class="row-action star-action" type="button" data-action="/items/star" data-starred="true" aria-label="Star selected items" title="Star selected items"><i class="bi bi-star" aria-hidden="true"></i></button>
+            {% if not is_shared_workspace or workspace_can_edit %}
+            <button id="bulk-actions-button" class="row-action more-actions-button" type="button" aria-label="Selected item actions" title="Selected item actions" aria-expanded="false"><i class="bi bi-three-dots-vertical" aria-hidden="true"></i></button>
+            {% endif %}
+            {% else %}
+            <button class="row-action larger" type="button" data-action="/items/restore" aria-label="Restore selected items" title="Restore selected items"><i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i></button>
+            <button class="row-action larger danger-action" type="button" data-action="/items/permanent-delete" aria-label="Permanently delete selected items" title="Permanently delete selected items"><i class="bi bi-trash" aria-hidden="true"></i></button>
+            {% endif %}
+          </section>{% endif %}
+          <div>
+            <div class="breadcrumbs">
+              {% if is_public_workspace %}
+                <span>Public Files</span>
+              {% elif section == 'events' %}
+                {% if current_event or is_event_date_workspace %}<a href="{{ url_for('dashboard', section='events') }}">Events</a>{% else %}<span>Events</span>{% endif %}
+                {% if is_event_date_workspace %}
+                <span>/</span>
+                <span>{{ selected_event_date.strftime('%b ') }}{{ selected_event_date.day }}{{ selected_event_date.strftime(', %Y') }}</span>
+                {% endif %}
+                {% if current_event %}
+                <span>/</span>
+                {% if breadcrumbs %}<a href="{{ url_for('dashboard', section='events', event=event_id) }}">{{ display_name(current_event.name) }}</a>{% else %}<span>{{ display_name(current_event.name) }}</span>{% endif %}
+                {% endif %}
+                {% for crumb in breadcrumbs %}
+                <span>/</span>
+                {% if loop.last %}<span>{{ display_name(crumb.name) }}</span>{% else %}<a href="{{ url_for('dashboard', section='events', event=event_id, folder=crumb.id) }}">{{ display_name(crumb.name) }}</a>{% endif %}
+                {% endfor %}
+              {% else %}
+                {% if section in ['starred', 'trash', 'recent'] %}<a href="{{ url_for('dashboard') }}">My Files</a><span>/</span><span>{{ section|capitalize }}</span>{% else %}<a href="{{ url_for('dashboard') }}">My Files</a>{% endif %}
+                {% for crumb in breadcrumbs %}
+                <span>/</span>
+                {% if loop.last %}<span>{{ display_name(crumb.name) }}</span>{% else %}<a href="{{ url_for('dashboard', folder=crumb.id) }}">{{ display_name(crumb.name) }}</a>{% endif %}
+                {% endfor %}
+              {% endif %}
+            </div>
+            <div class="title-filter workspace-title-content">
+              <h1>
+                {% if is_public_workspace %}
+                Public Files
+                {% elif is_trash %}
+                Trash
+                {% elif is_global_search %}
+                Search results
+                {% elif section == 'starred' %}
+                Starred
+                {% elif section == 'recent' %}
+                Recent
+                {% elif is_event_date_workspace %}
+                {{ selected_event_date.strftime('%b ') }}{{ selected_event_date.day }}{{ selected_event_date.strftime(', %Y') }}
+                {% elif current_event %}
+                <span class="workspace-event-title"><img class="event-icon-inline" src="{{ url_for('static', filename='images/' ~ event_icon_file(current_event.event_type)) }}" alt=""><span>{{ display_name(current_event.name) }}</span></span>
+                {% elif section == 'events' %}
+                Events
+                {% elif current_folder %}
+                {{ display_name(current_folder.name) }}
+                {% else %}
+                My Files
+                {% endif %}
+              </h1>
+              <div class="vr"> </div>
+              <div class="filter-controls">
+                <div class="filter-wrap">
+                  <button id="type-filter-button" class="button secondary filter-button" type="button" aria-expanded="false" aria-controls="type-filter-menu" title="Filter by type"><span class="filter-button-label">Type</span> <i class="bi bi-caret-down-fill filter-button-icon" aria-hidden="true"></i></button>
+                  <div id="type-filter-menu" class="filter-menu" hidden>
+                  <p>Filter by type</p>
+                  <label><input type="radio" name="file-type-filter" value="all" checked><img class="filter-type-icon" src="{{ url_for('static', filename='images/All.png') }}" alt=""> All types</label>
+                  <label><input type="radio" name="file-type-filter" value="folder"><img class="filter-type-icon" src="{{ url_for('static', filename='images/Folder.png') }}" alt=""> Folders</label>
+                  <label><input type="radio" name="file-type-filter" value="image"><img class="filter-type-icon" src="{{ url_for('static', filename='images/Image.png') }}" alt=""> Images</label>
+                  <label><input type="radio" name="file-type-filter" value="pdf"><img class="filter-type-icon" src="{{ url_for('static', filename='images/PDF.png') }}" alt=""> PDFs</label>
+                  <label><input type="radio" name="file-type-filter" value="document"><img class="filter-type-icon" src="{{ url_for('static', filename='images/Word.png') }}" alt=""> Documents</label>
+                  <label><input type="radio" name="file-type-filter" value="spreadsheet"><img class="filter-type-icon" src="{{ url_for('static', filename='images/Spreadsheet.png') }}" alt=""> Spreadsheets</label>
+                  <label><input type="radio" name="file-type-filter" value="powerpoint"><img class="filter-type-icon" src="{{ url_for('static', filename='images/PPT.png') }}" alt=""> PowerPoints</label>
+                  <label><input type="radio" name="file-type-filter" value="video"><img class="filter-type-icon" src="{{ url_for('static', filename='images/Video.png') }}" alt=""> Videos</label>
+                  <label><input type="radio" name="file-type-filter" value="audio"><img class="filter-type-icon" src="{{ url_for('static', filename='images/Audio.png') }}" alt=""> Audios</label>
+                  <label><input type="radio" name="file-type-filter" value="zip"><img class="filter-type-icon" src="{{ url_for('static', filename='images/Zip.png') }}" alt=""> ZIP files</label>
+                  <label><input type="radio" name="file-type-filter" value="other"><img class="filter-type-icon" src="{{ url_for('static', filename='images/File.png') }}" alt=""> Other</label>
+                  </div>
+                </div>
+                {% if not is_event_date_workspace %}
+                <div class="filter-wrap">
+                  <button id="date-filter-button" class="button secondary filter-button" type="button" aria-expanded="false" aria-controls="date-filter-menu" title="Filter by date" data-date-filter-mode="{{ 'exact' if section == 'events' else 'relative' }}"><span class="filter-button-label">Date</span> <i class="bi bi-caret-down-fill filter-button-icon" aria-hidden="true"></i></button>
+                  <div id="date-filter-menu" class="filter-menu" hidden data-date-filter-mode="{{ 'exact' if section == 'events' else 'relative' }}">
+                  {% if section == 'events' %}
+                  <p>Filter by date</p>
+                  <label class="event-filter-date-field" for="workspace-date-filter-input">
+                    <input id="workspace-date-filter-input" class="event-filter-date-native-input" type="date" value="">
+                    <span class="event-filter-date-display" aria-hidden="true">Select a date</span>
+                  </label>
+                  <button id="clear-exact-date-filter" class="text-button exact-date-clear-button" type="button" hidden>Show all items</button>
+                  {% else %}
+                  <p>Filter by date</p>
+                  <label><input type="radio" name="file-date-filter" value="all" checked> Any date</label>
+                  <label><input type="radio" name="file-date-filter" value="today"> Today</label>
+                  <label><input type="radio" name="file-date-filter" value="7"> Last 7 days</label>
+                  <label><input type="radio" name="file-date-filter" value="30"> Last 30 days</label>
+                  <label><input type="radio" name="file-date-filter" value="365"> Last year</label>
+                  {% endif %}
+                  </div>
+                </div>
+                {% endif %}
+                <div class="filter-wrap">
+                  <button id="clear-filters-button" class="button secondary filter-button" type="button" title="Clear all filters" hidden><i class="bi bi-x-lg"></i> Clear filters</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="workspace-title-actions">
+            {% if is_event_date_workspace %}
+            <button id="date-workspace-add-event" class="button primary" type="button"><i class="bi bi-calendar-plus"></i> Add Event</button>
+            {% elif section == 'events' and not current_event %}
+            <button id="events-home-add-event" class="button primary" type="button"><i class="bi bi-calendar-plus"></i> Add New Event</button>
+            {% elif not is_public_workspace and not is_shared_listing and not is_trash and (not is_shared_workspace or workspace_can_edit) %}
+            <button id="upload-button" class="button primary" type="button"><i class="bi bi-upload"></i> Upload files</button>
+            {% endif %}
+            
+        </section>
+        {% if not is_public_workspace and not is_shared_listing %}<form id="upload-form" method="post" action="{{ url_for('upload') }}" enctype="multipart/form-data" data-max-size-mb="{{ max_file_size_mb }}" hidden>
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="folder_id" value="{{ folder_id or '' }}">
+          {% if share_context %}
+          <input type="hidden" name="share_context_kind" value="{{ share_context.kind }}">
+          <input type="hidden" name="share_context_token" value="{{ share_context.token }}">
+          {% endif %}
+          <input id="file-input" name="file" type="file" multiple>
+          <input id="folder-input" name="folder" type="file" webkitdirectory directory multiple>
+        </form>{% endif %}
+        <div id="folder-modal" class="modal" hidden aria-modal="true" role="dialog" aria-labelledby="folder-title">
+          <section class="modal-card">
+            <h2 id="folder-title">New folder</h2>
+            <form method="post" action="{{ url_for('create_folder') }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="parent_id" value="{{ folder_id or '' }}">
+              <div class="inline-form">
+                <input id="folder-name" name="name" maxlength="60" placeholder="Folder name" required>
+              </div>
+              <div class="modal-actions">
+                <button id="cancel-folder" class="button secondary" type="button">Cancel</button>
+                <button class="button primary">Create folder</button>
+              </div>
+            </form>
+          </section>
+        </div>
+        <div id="event-modal" class="modal" hidden aria-modal="true" role="dialog" aria-labelledby="event-title">
+          <section class="modal-card">
+            <h2 id="event-title">New Event</h2>
+            <form method="post" action="{{ url_for('create_event') }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <div class="inline-form"><input id="event-name" name="name" maxlength="60" placeholder="Event name" required aria-required="true"></div>
+              <div class="inline-form">
+                <label class="event-date-field" for="event-date-input">
+                  <input id="event-date-input" class="event-date-native-input" name="event_date" type="date" value="{{ selected_event_date_iso if is_event_date_workspace else '' }}" required aria-required="true">
+                  <span class="event-date-formatted-display" aria-hidden="true">Select a date</span>
+                </label>
+              </div>
+              <section class="event-icon-picker" aria-labelledby="event-icon-title">
+                <h3 id="event-icon-title">Choose an icon</h3>
+                <div class="event-icon-options">
+                  {% for icon_key, icon_label, icon_filename in event_icon_options %}
+                  <div class="event-icon-option">
+                    <input id="event-icon-{{ icon_key }}" class="event-icon-radio" type="radio" name="event_type" value="{{ icon_key }}"{% if icon_key == 'event' %} checked{% endif %}>
+                    <label class="event-icon-card" for="event-icon-{{ icon_key }}">
+                      <img src="{{ url_for('static', filename='images/' ~ icon_filename) }}" alt="" aria-hidden="true">
+                      <span>{{ icon_label }}</span>
+                    </label>
+                  </div>
+                  {% endfor %}
+                </div>
+              </section>
+              <div class="modal-actions"><button id="cancel-event" class="button secondary" type="button">Cancel</button><button class="button primary" type="submit">Create Event</button></div>
+            </form>
+          </section>
+        </div>
+        <div id="move-modal" class="modal rename-item-modal" hidden aria-modal="true" role="dialog" aria-labelledby="move-title">
+          <section class="modal-card rename-item-card">
+            <h2 id="move-title">Move items</h2>
+            <form id="move-form">
+              <select id="move-destination" name="destination_id" required>
+                <option value="root">My Files</option>
+                {% for folder in move_folders %}
+                <option value="{{ folder.id }}">{{ display_name(folder.name) }}</option>
+                {% endfor %}
+              </select>
+              <div class="modal-actions">
+                <button id="cancel-move" class="button secondary" type="button">Cancel</button>
+                <button class="button primary" type="submit">Move</button>
+              </div>
+            </form>
+          </section>
+        </div>
+        <form id="bulk-form" method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          {% if share_context %}
+          <input type="hidden" name="share_context_kind" value="{{ share_context.kind }}">
+          <input type="hidden" name="share_context_token" value="{{ share_context.token }}">
+          {% endif %}
+          <section id="file-results" class="file-workspace">
+            {% if is_event_date_workspace and not is_global_search %}
+            <section class="date-workspace-panel">
+              <div class="date-workspace-header">
+                <!-- <div>
+                  <h2>Events on {{ selected_event_date.strftime('%b ') }}{{ selected_event_date.day }}{{ selected_event_date.strftime(', %Y') }}</h2>
+                  <p>Create a new Event for this date or jump into an existing Event to add files.</p>
+                </div> -->
+                <!-- <button class="button secondary" type="button" id="date-workspace-add-event-secondary"><i class="bi bi-calendar-plus"></i> Add Event</button> -->
+              </div>
+              {% if date_workspace_events %}
+              <div class="date-workspace-events">
+                {% for event in date_workspace_events %}
+                <article class="date-workspace-event-card">
+                  <div>
+                    <h3><img class="event-icon-inline" src="{{ url_for('static', filename='images/' ~ event_icon_file(event.event_type)) }}" alt=""> {{ display_name(event.name) }}</h3>
+                    <p>Scheduled for {{ event.event_date.strftime('%b ') }}{{ event.event_date.day }}{{ event.event_date.strftime(', %Y') }}</p>
+                  </div>
+                  <div class="date-workspace-event-actions">
+                    <a class="button secondary" href="{{ url_for('dashboard', section='events', event=event.id) }}"><i class="bi bi-box-arrow-up-right"></i> Open Event</a>
+                    <a class="button primary" href="{{ url_for('dashboard', section='events', event=event.id) }}"><i class="bi bi-upload"></i> Add Files to Event</a>
+                  </div>
+                </article>
+                {% endfor %}
+              </div>
+              {% else %}
+              <div class="empty-state">
+                <h3>No Events scheduled for this date</h3>
+                <p style="margin-top: 20px;">Create an Event here and it will automatically use {{ selected_event_date.strftime('%b ') }}{{ selected_event_date.day }}{{ selected_event_date.strftime(', %Y') }}.</p>
+              </div>
+              {% endif %}
+            </section>
+            {% elif items %}
+            <!-- <div class="file-controls">
+              <p>{{ total_files }} item{% if total_files != 1 %}s{% endif %}</p>
+            </div> -->
+            <div class="table-wrap">
+              <table class="file-table" data-workspace="{{ section }}" data-recent-view="{{ 'true' if section == 'recent' else 'false' }}">
+                <thead>
+                  <tr>
+                    {% if not is_public_workspace and not is_shared_listing %}<th><input id="select-all" type="checkbox" aria-label="Select all"></th>{% endif %}
+                    <th>Name</th>
+                    {% if is_global_search or section in ['recent', 'starred'] %}<th class="item-location column-location">Location</th>{% endif %}
+                    {% if section != 'recent' %}<th class="column-type">Type</th>{% endif %}
+                    <th class="column-size">Size</th>
+                    <th class="column-modified">{{ 'Date Deleted' if is_trash else 'Last Modified' if section == 'recent' else 'Date' }}</th>
+                    {% if not is_public_workspace and not is_shared_listing %}<th>
+                      <div class="sort-wrap">
+                        <button id="sort-button" class="sort-button" type="button" aria-expanded="false" aria-controls="sort-menu">Sort by</button>
+                        <button id="sort-direction-button" class="sort-direction-button" type="button" aria-label="Sort ascending" title="Sort ascending"><i class="bi bi-sort-up" aria-hidden="true"></i></button>
+                        <div id="sort-menu" class="sort-menu" hidden>
+                          <button type="button" data-sort-field="date"><i class="bi bi-calendar-date" aria-hidden="true"></i> Date</button>
+                          <button type="button" data-sort-field="name"><i class="bi bi-card-text" aria-hidden="true"></i> Name</button>
+                          <button type="button" data-sort-field="size"><i class="bi bi-sd-card" aria-hidden="true"></i> Size</button>
+                        </div>
+                      </div>
+                    </th>{% endif %}
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for item in items %}
+                  {% if is_public_workspace or is_shared_listing %}
+                    {% set item_open_url = url_for('shared_event', share_token=item.share_token) if item.kind == 'event' else url_for('shared_folder', share_token=item.share_token) if item.kind == 'folder' else url_for('token_preview', share_token=item.share_token) %}
+                  {% elif is_global_search %}
+                    {% set item_open_url = url_for('dashboard', section='trash') if is_trash else url_for('shared_event', share_token=share_context.token, folder=item.id) if is_shared_workspace and share_context.kind == 'event' and item.kind == 'folder' else url_for('shared_folder', share_token=share_context.token, folder=item.id) if is_shared_workspace and share_context.kind == 'folder' and item.kind == 'folder' else url_for('preview', file_id=item.id, share_context_kind=share_context.kind, share_context_token=share_context.token) if is_shared_workspace and item.kind == 'file' else url_for('dashboard', folder=item.id) if item.kind == 'folder' else url_for('preview', file_id=item.id) %}
+                  {% else %}
+                    {% set item_open_url = url_for('preview', file_id=item.id, share_context_kind=share_context.kind, share_context_token=share_context.token) if is_shared_workspace and item.kind == 'file' and not is_trash else url_for('shared_event', share_token=share_context.token, folder=item.id) if is_shared_workspace and share_context.kind == 'event' and item.kind == 'folder' and not is_trash else url_for('shared_folder', share_token=share_context.token, folder=item.id) if is_shared_workspace and share_context.kind == 'folder' and item.kind == 'folder' and not is_trash else url_for('preview', file_id=item.id) if item.kind == 'file' and not is_trash else url_for('dashboard', folder=item.id) if item.kind == 'folder' and not is_trash else '' %}
+                  {% endif %}
+                  <tr{% if item.kind == 'file' and not is_trash %} class="previewable-row" data-preview-url="{{ item_open_url }}"{% endif %} data-kind="{{ item.kind }}" data-item-id="{{ item.id }}" data-parent-id="{{ item.parent_id or '' }}" data-item-name="{{ item.name }}" data-item-display-name="{{ display_name(item.name) }}" data-item-type="{{ 'Folder' if item.kind == 'folder' else clean_file_type(item) }}" data-item-size="{{ display_item_size(item.kind, item.size if item.kind in ['folder', 'event'] else item.file_size) }}" data-item-location="{{ item.location }}" data-item-accessed="{{ format_datetime(item.accessed_at) if item.kind in ['file', 'folder'] and item.accessed_at else '—' }}" data-sort-size="{{ item.size if item.kind == 'folder' else item.file_size }}" data-item-modified="{{ format_datetime(item.date) }}" data-item-date-label="{{ 'Date deleted' if is_trash else 'Created or uploaded' }}" data-item-expiration="{{ trash_days_remaining(item.deleted_at) if is_trash and item.deleted_at else '' }}" data-open-url="{{ item_open_url }}" data-download-url="{{ url_for('download_event', event_id=item.id, share_context_kind=share_context.kind, share_context_token=share_context.token) if item.kind == 'event' and is_shared_workspace else url_for('download_event', event_id=item.id) if item.kind == 'event' else url_for('download_folder', folder_id=item.id, share_context_kind=share_context.kind, share_context_token=share_context.token) if is_shared_workspace and item.kind == 'folder' else url_for('download', file_id=item.id, share_context_kind=share_context.kind, share_context_token=share_context.token) if is_shared_workspace and item.kind == 'file' else url_for('download_folder', folder_id=item.id) if item.kind == 'folder' else url_for('download', file_id=item.id) }}" data-share-url="{{ url_for('token_preview', share_token=item.share_token, _external=true) if item.kind == 'file' and item.share_token and item.is_share_link_enabled else url_for('shared_folder', share_token=item.share_token, _external=true) if item.kind == 'folder' and item.share_token and item.is_share_link_enabled else url_for('shared_event', share_token=item.share_token, _external=true) if item.kind == 'event' and item.share_token and item.is_share_link_enabled else '' }}"{% if item.kind == 'folder' and not is_trash %} data-folder-id="{{ item.id }}"{% endif %} data-file-type="{{ 'folder' if item.kind == 'folder' else file_type_key(item) }}" data-modified-date="{{ item.date.isoformat() if item.date else '' }}"{% if item.kind == 'event' %} data-item-icon="{{ item.event_type }}"{% endif %}>
+                    {% if not is_public_workspace and not is_shared_listing %}<td><input class="item-select" type="checkbox" name="items" value="{{ item.kind }}:{{ item.id }}"></td>{% endif %}
+                    <td class="file-name">
+                      {% if item.kind == 'event' %}
+                      {% if not is_trash %}<a href="{{ item_open_url }}">{% else %}<span>{% endif %}<img class="event-icon-inline" src="{{ url_for('static', filename='images/' ~ event_icon_file(item.event_type)) }}" alt=""> {{ display_name(item.name) }}{% if not is_trash %}</a>{% else %}</span>{% endif %}
+                      {% elif item.kind == 'folder' %}
+                      {% if not is_trash or is_global_search %}
+                      <a href="{{ item_open_url }}">
+                      {% else %}
+                      <span>
+                      {% endif %}
+                        <img class="file-type-icon" src="{{ url_for('static', filename='images/Folder.png') }}" alt="">
+                        {{ display_name(item.name) }}
+                      {% if not is_trash or is_global_search %}
+                      </a>
+                      {% else %}
+                      </span>
+                      {% endif %}
+                      {% else %}
+                      <a href="{{ item_open_url or '#' }}">
+                        <img class="file-type-icon" src="{{ url_for('static', filename='images/' ~ file_type_icon(item)) }}" alt="">
+                        {% if item.kind == 'file' and '.' in item.name and not item.name.startswith('.') %}
+                        <span class="file-name-stem">{{ display_name(item.name.rsplit('.', 1)[0]) }}</span>
+                        <span class="file-name-extension">.{{ display_name(item.name.rsplit('.', 1)[1]) }}</span>
+                        {% else %}
+                        {{ display_name(item.name) }}
+                        {% endif %}
+                      </a>
+                      {% endif %}
+                    </td>
+                    {% if is_global_search or section in ['recent', 'starred'] %}<td class="item-location column-location">{% if item.location_url and not item.location_is_current %}<a class="location-link" href="{{ item.location_url }}">{{ item.location }}</a>{% else %}{{ item.location }}{% endif %}</td>{% endif %}
+                    {% if section != 'recent' %}
+                    <td class="column-type">
+                      {% if section == 'events' and not current_event and not is_event_date_workspace and item.kind == 'event' %}
+                      {{ event_type_label(item.event_type) }}
+                      {% else %}
+                      {{ 'Folder' if item.kind == 'folder' else clean_file_type(item) }}
+                      {% endif %}
+                    </td>
+                    {% endif %}
+                    <td class="column-size">{{ display_item_size(item.kind, item.size if item.kind in ['folder', 'event'] else item.file_size) }}</td>
+                    <td class="column-modified">{{ format_datetime(item.date) }}{% if is_trash and item.deleted_at %}<div class="trash-retention-note">{{ trash_days_remaining(item.deleted_at) }}</div>{% endif %}</td>
+                    {% if not is_public_workspace and not is_shared_listing %}<td class="actions">
+                      <div class="actions2">
+                        {% if not is_trash %}
+                        <a class="row-action download-action" href="{{ url_for('download_event', event_id=item.id, share_context_kind=share_context.kind, share_context_token=share_context.token) if item.kind == 'event' and is_shared_workspace else url_for('download_event', event_id=item.id) if item.kind == 'event' else url_for('download', file_id=item.id, share_context_kind=share_context.kind, share_context_token=share_context.token) if is_shared_workspace and item.kind == 'file' else url_for('download_folder', folder_id=item.id, share_context_kind=share_context.kind, share_context_token=share_context.token) if is_shared_workspace and item.kind == 'folder' else url_for('download', file_id=item.id) if item.kind == 'file' else url_for('download_folder', folder_id=item.id) }}" title="Download"><i class="bi bi-download"></i></a>
+                        {% if not is_shared_workspace %}
+                        <button class="row-action star-action toggle-star {% if item.is_starred %}is-starred{% endif %}" type="button" data-item="{{ item.kind }}:{{ item.id }}" data-starred="{{ 'false' if item.is_starred else 'true' }}" aria-label="{{ 'Remove from Starred' if item.is_starred else 'Add to Starred' }}" title="{{ 'Unstar' if item.is_starred else 'Star' }}"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 2.8l2.8 5.7 6.3.9-4.6 4.5 1.1 6.3-5.6-3-5.6 3 1.1-6.3-4.6-4.5 6.3-.9L12 2.8z"{% if item.is_starred %} fill="currentColor"{% else %} fill="none"{% endif %} stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></button>
+                        {% endif %}
+                        <button class="row-action more-actions-button" type="button" aria-label="More actions" title="More actions"><i class="bi bi-three-dots-vertical"></i></button>
+                        {% else %}
+                        <button class="row-action larger" type="button" data-row-action="restore" aria-label="Restore" title="Restore"><i class="bi bi-arrow-counterclockwise"></i></button>
+                        <button class="row-action larger danger-action" type="button" data-row-action="permanent-delete" aria-label="Delete Permanently" title="Delete Permanently"><i class="bi bi-trash"></i></button>
+                        {% endif %}
+                      </div>
+                    </td>{% endif %}
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            <div id="no-search-results" class="empty-state" hidden>
+              <h3>No matching items</h3>
+              <p>Try a different type or date filter.</p>
+            </div>
+            {% else %}
+            <div class="empty-state">
+              {% if is_global_search %}
+              <h3>No matching items</h3>
+              <p style="margin-top: 20px;">Try a different search term.</p>
+              {% elif is_event_date_workspace %}
+              <h3>No Events scheduled for this date</h3>
+              <p style="margin-top: 20px;">Create an Event to start organizing files for this day.</p>
+              {% elif current_event %}
+              <h3>This Event is empty</h3>
+              <p style="margin-top: 20px;">Upload files or create folders to organize this Event.</p>
+              {% elif section == 'events' %}
+              <h3>No Events yet</h3>
+              <p style="margin-top: 20px;">Create an Event to organize its files and folders.</p>
+              {% else %}
+              <h3>No items here</h3>
+              <p style="margin-top: 20px;">You can add files by uploading or dragging them here.</p>
+              {% endif %}
+            </div>
+            {% endif %}
+          </section>
+        </form>
+        <aside id="properties-panel" class="properties-panel" hidden aria-labelledby="properties-panel-title">
+          <header><h2 id="properties-panel-title">Properties</h2><button id="close-properties-panel" class="row-action" type="button" aria-label="Close properties" title="Close"><i class="bi bi-x-lg"></i></button></header>
+          <dl id="properties-panel-list" class="item-properties"></dl>
+        </aside>
+      </div>
+    </div>
+  </main>
+</div>
+<div id="item-actions-modal" class="modal item-actions-modal" hidden aria-modal="true" role="dialog" aria-labelledby="item-actions-title">
+  <section class="modal-card item-actions-card">
+    <div class="item-actions-header">
+      <h2 id="item-actions-title" style="display: none;">Item actions</h2>
+    </div>
+    <p id="item-actions-name" class="muted" style="display: none;"></p>
+    <div class="item-actions-list">
+      {% if not is_trash %}
+      <a id="open-item" class="norms" href=""><i class="bi bi-arrow-up-right"></i> Open</a>
+      <hr style="width: 100%; margin: 3px 0; background-color: #cbd2dc; size: 0.5px;">
+      <a id="download-item" class="norms" href=""><i class="bi bi-download"></i> Download</a>
+      <button id="copy-item-link" class="norms cplnk" type="button"><i class="bi bi-link-45deg"></i> Copy link</button>
+      {% if workspace_can_manage_sharing or not is_shared_workspace %}
+      <button id="share-item" class="norms" type="button"><i class="bi bi-people"></i> Share</button>
+      {% endif %}
+      <hr style="width: 100%; margin: 3px 0; background-color: #cbd2dc; size: 0.5px;">
+      {% if not is_shared_workspace or workspace_can_edit %}
+      <button id="rename-item" class="norms" type="button"><i class="bi bi-pencil-square"></i> <span id="rename-item-label">Rename</span></button>
+      <button id="move-item" class="norms" type="button"><i class="bi bi-folder-symlink"></i> Move</button>
+      {% endif %}
+      {% if not is_shared_workspace %}
+      <button id="star-item" class="norms" type="button"><i class="bi bi-star"></i> Star</button>
+      {% endif %}
+      <button id="properties-item" class="norms" type="button"><i class="bi bi-info-circle"></i> Properties</button>
+      {% if not is_shared_workspace %}
+      <hr style="width: 100%; margin: 3px 0; background-color: #cbd2dc; size: 0.5px;">
+      <button id="delete-item" class="norms" type="button"><i class="bi bi-trash"></i> Move to Trash</button>
+      {% endif %}
+      {% else %}
+      <button id="restore-item" class="norms" type="button"><i class="bi bi-arrow-counterclockwise"></i> Restore</button>
+      <button id="permanent-delete-item" class="norms" type="button"><i class="bi bi-trash"></i> Delete Permanently</button>
+      {% endif %}
+    </div>
+    <dl id="item-properties" class="item-properties" hidden></dl>
+  </section>
+</div>
+<div id="bulk-actions-modal" class="modal item-actions-modal" hidden aria-modal="true" role="dialog" aria-labelledby="bulk-actions-title">
+  <section class="modal-card item-actions-card">
+    <div class="item-actions-header">
+      <h2 id="bulk-actions-title" style="display: none;">Selected item actions</h2>
+    </div>
+    <div class="item-actions-list">
+      {% if not is_trash %}
+      <button class="norms" type="button" data-action="/items/download"><i class="bi bi-download"></i> Download</button>
+      <hr style="width: 100%; margin: 3px 0; background-color: #cbd2dc; size: 0.5px;">
+      <button class="norms" type="button" data-action="/items/star" data-starred="true"><i class="bi bi-star"></i> Star</button>
+      <button class="norms" type="button" data-action="/items/move"><i class="bi bi-folder-symlink"></i> Move</button>
+      <hr style="width: 100%; margin: 3px 0; background-color: #cbd2dc; size: 0.5px;">
+      <button class="norms bulk-danger-action" type="button" data-action="/items/trash"><i class="bi bi-trash"></i> Move to Trash</button>
+      {% else %}
+      <button class="norms" type="button" data-action="/items/restore"><i class="bi bi-arrow-counterclockwise"></i> Restore</button>
+      <button class="norms bulk-danger-action" type="button" data-action="/items/permanent-delete"><i class="bi bi-trash"></i> Delete Permanently</button>
+      {% endif %}
+    </div>
+  </section>
+</div>
+<div id="rename-item-modal" class="modal rename-item-modal" hidden aria-modal="true" role="dialog" aria-labelledby="rename-item-title">
+  <section class="modal-card rename-item-card">
+    <h2 id="rename-item-title">Rename item</h2>
+    <form id="rename-item-form" class="rename-item-form" method="post" action="{{ url_for('rename_item') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {% if share_context %}
+      <input type="hidden" name="share_context_kind" value="{{ share_context.kind }}">
+      <input type="hidden" name="share_context_token" value="{{ share_context.token }}">
+      {% endif %}
+      <input type="hidden" name="kind" id="rename-item-kind">
+      <input type="hidden" name="item_id" id="rename-item-id">
+      <div class="rename-filename-input">
+        <input id="rename-item-name" name="name" maxlength="60" required>
+        <span id="rename-item-extension" class="rename-item-extension" hidden></span>
+      </div>
+      <div class="modal-actions">
+        <button id="cancel-rename-item" class="button secondary" type="button">Cancel</button>
+        <button id="rename-item-submit" class="button primary" type="submit">Rename</button>
+      </div>
+    </form>
+  </section>
+</div>
+<div id="edit-event-modal" class="modal rename-item-modal" hidden aria-modal="true" role="dialog" aria-labelledby="edit-event-title">
+  <section class="modal-card rename-item-card">
+    <h2 id="edit-event-title">Edit Event</h2>
+    <form id="edit-event-form" class="rename-item-form" method="post" action="{{ url_for('update_event') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {% if share_context %}
+      <input type="hidden" name="share_context_kind" value="{{ share_context.kind }}">
+      <input type="hidden" name="share_context_token" value="{{ share_context.token }}">
+      {% endif %}
+      <input type="hidden" name="item_id" id="edit-event-id">
+      <div class="rename-filename-input">
+        <input id="edit-event-name" name="name" maxlength="60" required>
+      </div>
+      <section id="edit-event-icon-picker" class="event-icon-picker" aria-labelledby="edit-event-icon-title">
+        <h3 id="edit-event-icon-title">Choose an icon</h3>
+        <div class="event-icon-options">
+          {% for icon_key, icon_label, icon_filename in event_icon_options %}
+          <div class="event-icon-option">
+            <input id="edit-event-icon-{{ icon_key }}" class="event-icon-radio" type="radio" name="event_type" value="{{ icon_key }}"{% if icon_key == 'event' %} checked{% endif %}>
+            <label class="event-icon-card" for="edit-event-icon-{{ icon_key }}">
+              <img src="{{ url_for('static', filename='images/' ~ icon_filename) }}" alt="" aria-hidden="true">
+              <span>{{ icon_label }}</span>
+            </label>
+          </div>
+          {% endfor %}
+        </div>
+      </section>
+      <div class="modal-actions">
+        <button id="cancel-edit-event" class="button secondary" type="button">Cancel</button>
+        <button id="edit-event-submit" class="button primary" type="submit">Save Changes</button>
+      </div>
+    </form>
+  </section>
+</div>
+<div id="custom-dialog-modal" class="modal rename-item-modal" hidden aria-modal="true" role="dialog" aria-labelledby="custom-dialog-title">
+  <section class="modal-card rename-item-card">
+    <h2 id="custom-dialog-title">Notice</h2>
+    <p id="custom-dialog-message" class="custom-dialog-message"></p>
+    <div class="modal-actions">
+      <button id="custom-dialog-cancel" class="button secondary" type="button">Cancel</button>
+      <button id="custom-dialog-action" class="button primary" type="button">OK</button>
+    </div>
+  </section>
+</div>
+<div id="logout-modal" class="modal" hidden aria-modal="true" role="dialog" aria-labelledby="logout-title">
+  <section class="modal-card">
+    <h2 id="logout-title">Sign out?</h2>
+    <p>Are you sure you want to sign out?</p>
+    <div class="modal-actions">
+      <button id="cancel-logout" class="button secondary" type="button">Cancel</button>
+      <a id="confirm-logout" class="button danger" href="{{ url_for('logout') }}">Sign out</a>
+    </div>
+  </section>
+</div>
+<div id="events-calendar-modal" class="modal events-calendar-modal" hidden aria-modal="true" role="dialog" aria-labelledby="events-calendar-modal-title">
+  <section class="modal-card events-calendar-modal-card"{% if calendar_auto_open %} data-auto-open="true"{% endif %}>
+    <div class="events-calendar-modal-header">
+      <h2 id="events-calendar-modal-title">Events Calendar</h2>
+      <button id="close-events-calendar" class="close-button" type="button" aria-label="Close Events calendar"><i class="bi bi-x-lg"></i></button>
+    </div>
+    {% set show_calendar_back_link = false %}
+    {% include "_events_calendar_content.html" %}
+  </section>
+</div>
+<div id="share-item-modal" class="modal rename-item-modal" hidden aria-modal="true" role="dialog" aria-labelledby="share-item-title">
+  <section class="modal-card rename-item-card">
+    <div class="item-actions-header">
+      <h2 id="share-item-title">Share <span id="share-item-title-name">item</span></h2>
+      <button id="close-share-item" class="close-button" type="button" aria-label="Close share modal"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <form id="share-user-form" class="rename-item-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="rename-filename-input">
+        <input id="share-identifier" name="identifier" maxlength="255" placeholder="Username or email" required>
+        <select id="share-permission" name="permission">
+          <option value="viewer">Viewer</option>
+          <option value="editor">Editor</option>
+        </select>
+      </div>
+      <div class="modal-actions">
+        <button class="button primary" type="submit">Share</button>
+      </div>
+    </form>
+    
+    <div id="share-users-list" class="item-properties preview-properties-list" style="margin-top: 1rem;"></div>
+    <div id="share-link-panel" class="item-properties preview-properties-list" style="margin-top: 1rem;"></div>
+  </section>
+</div>
+{% endblock %}

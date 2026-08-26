@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+{% block title %}Preview | JFCM Pantry{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.3.0/font/bootstrap-icons.css">
+
+<main class="preview-page">
+  <section class="preview-modal" aria-label="File preview">
+    <header class="preview-header">
+      <div class="preview-title">
+        <a id="close-preview" class="button secondary small close-button-link" href="{{ workspace_return_url }}" aria-label="Close preview"><i class="bi bi-x"></i></a>
+        <div>
+          <h1>{{ display_name(file.original_filename) }}</h1>
+          <p>
+            {{ clean_file_type(file) }} <span style="color: #000; margin: 0 4px;">|</span> 
+            {{ readable_size(file.file_size) }} <span style="color: #000; margin: 0 4px;">|</span> 
+            Uploaded {{ format_datetime(file.uploaded_at) }}
+          </p>
+        </div>
+      </div>
+      {% if not is_public_workspace %}<div class="preview-buttons">
+        <a class="row-action preview-action download-button" href="{{ url_for('download', file_id=file.id, share_context_kind=share_context.kind, share_context_token=share_context.token) if share_context else url_for('download', file_id=file.id) }}" aria-label="Download file" title="Download"><i class="bi bi-download"></i></a>
+        {% if file.is_share_link_enabled or (share_context and share_context.kind == 'file') %}
+        <button id="copy-link" class="row-action preview-action cplnk copy-button" type="button" data-share-url="{{ url_for('token_preview', share_token=file.share_token, _external=true) }}" aria-label="Copy link" title="Copy link"><i class="bi bi-link-45deg"></i></button>
+        {% endif %}
+        <div class="preview-more-wrap">
+          <button id="preview-more-button" class="row-action preview-action" type="button" aria-label="More actions" title="More actions" aria-expanded="false" aria-controls="preview-more-menu"><i class="bi bi-three-dots-vertical"></i></button>
+          <div id="preview-more-menu" class="preview-more-menu" hidden>
+            <a class="norms" href="{{ url_for('download', file_id=file.id, share_context_kind=share_context.kind, share_context_token=share_context.token) if share_context else url_for('download', file_id=file.id) }}"><i class="bi bi-download"></i> Download</a>
+            {% if file.is_share_link_enabled or (share_context and share_context.kind == 'file') %}
+            <button id="preview-copy-action" class="norms cplnk" type="button" data-share-url="{{ url_for('token_preview', share_token=file.share_token, _external=true) }}"><i class="bi bi-link-45deg"></i> Copy link</button>
+            {% endif %}
+            {% if workspace_can_manage_sharing %}
+            <button id="preview-share-button" class="norms" type="button" data-kind="file" data-item-id="{{ file.id }}" data-item-name="{{ display_name(file.original_filename) }}"><i class="bi bi-people"></i> Share</button>
+            {% endif %}
+            <hr style="width: 93%; margin: 4px auto; background-color: #ccc; border: 0; height: 1px; display: block;"> 
+            {% if not share_context %}
+            <button id="preview-star-button" class="norms" type="button" data-file-id="{{ file.id }}" data-starred="{{ 'true' if file.is_starred else 'false' }}" data-star-url="{{ url_for('star_items') }}"><i class="bi bi-star{{ '-fill' if file.is_starred else '' }}"></i> {{ 'Unstar' if file.is_starred else 'Star' }}</button>
+            {% endif %}
+            {% if workspace_can_edit %}
+            <button id="preview-rename-button" class="norms" type="button"><i class="bi bi-pencil-square"></i> Rename</button>
+            <button id="preview-move-button" class="norms" type="button"><i class="bi bi-folder-symlink"></i> Move</button>
+            {% endif %}
+            <button id="preview-properties-button" class="norms" type="button"><i class="bi bi-info-circle"></i> Properties</button>
+            {% if not share_context %}
+            <hr style="width: 93%; margin: 4px auto; background-color: #ccc; border: 0; height: 1px; display: block;">
+            <button class="norms delete-button delete-trigger" type="button" data-file-id="{{ file.id }}" data-file-name="{{ display_name(file.original_filename) }}"><i class="bi bi-trash"></i> Move to Trash</button>
+            {% endif %}
+          </div>
+        </div>
+      </div>{% endif %}
+    </header>
+
+    <section class="preview-area{% if file.original_filename.lower().endswith('.png') %} preview-area-png{% endif %}">
+      {% if preview_kind == 'image' %}
+        <img class="image-preview" src="{{ url_for('preview_content', file_id=file.id, share_context_kind=share_context.kind, share_context_token=share_context.token) if share_context else url_for('preview_content', file_id=file.id) }}" alt="Preview of {{ display_name(file.original_filename) }}">
+      {% elif preview_kind == 'pdf' %}
+        <iframe class="document-preview" title="PDF preview" src="{{ url_for('preview_content', file_id=file.id, share_context_kind=share_context.kind, share_context_token=share_context.token) if share_context else url_for('preview_content', file_id=file.id) }}"></iframe>
+      {% elif preview_kind == 'text' %}
+        <pre id="text-preview" class="text-preview" data-content-url="{{ url_for('preview_content', file_id=file.id, share_context_kind=share_context.kind, share_context_token=share_context.token) if share_context else url_for('preview_content', file_id=file.id) }}">Loading text preview...</pre>
+      {% elif preview_kind == 'video' %}
+        <video class="media-preview" controls preload="metadata">
+          <source src="{{ url_for('preview_content', file_id=file.id, share_context_kind=share_context.kind, share_context_token=share_context.token) if share_context else url_for('preview_content', file_id=file.id) }}" type="{{ file.mime_type }}">
+          Your browser cannot play this video.
+        </video>
+      {% elif preview_kind == 'audio' %}
+        <div class="audio-preview">
+          <p>Audio preview</p>
+          <audio controls preload="metadata">
+            <source src="{{ url_for('preview_content', file_id=file.id, share_context_kind=share_context.kind, share_context_token=share_context.token) if share_context else url_for('preview_content', file_id=file.id) }}" type="{{ file.mime_type }}">
+            Your browser cannot play this audio.
+          </audio>
+        </div>
+      {% elif preview_kind == 'powerpoint' %}
+        <div id="powerpoint-preview" class="powerpoint-preview" data-content-url="{{ url_for('preview_content', file_id=file.id, share_context_kind=share_context.kind, share_context_token=share_context.token) if share_context else url_for('preview_content', file_id=file.id) }}" data-extension="{{ file.original_filename.rsplit('.', 1)[-1]|lower if '.' in file.original_filename else '' }}">
+          <canvas id="powerpoint-canvas" aria-label="PowerPoint slide preview"></canvas>
+          <div class="powerpoint-controls">
+            <button id="powerpoint-previous" class="button secondary small" type="button" disabled>Previous</button>
+            <span id="powerpoint-status" aria-live="polite">Loading PowerPoint preview...</span>
+            <button id="powerpoint-next" class="button secondary small" type="button" disabled>Next</button>
+          </div>
+        </div>
+      {% elif preview_kind == 'spreadsheet' %}
+        <div id="spreadsheet-preview" class="spreadsheet-preview" data-content-url="{{ url_for('preview_content', file_id=file.id, share_context_kind=share_context.kind, share_context_token=share_context.token) if share_context else url_for('preview_content', file_id=file.id) }}">
+          <p id="spreadsheet-status">Loading spreadsheet preview...</p>
+          <div class="spreadsheet-table-wrap">
+            <table id="spreadsheet-table" class="spreadsheet-table"></table>
+          </div>
+        </div>
+      {% else %}
+        <div class="preview-unavailable">
+          <h2>Preview unavailable</h2>
+          <p>This file type cannot be previewed in the browser.</p>
+          <dl>
+            <dt>File type</dt>
+            <dd>{{ clean_file_type(file) }}</dd>
+            <dt>File size</dt>
+            <dd>{{ readable_size(file.file_size) }}</dd>
+          </dl>
+          {% if not is_public_workspace %}<a class="button unavailable-download-button" href="{{ url_for('download', file_id=file.id, share_context_kind=share_context.kind, share_context_token=share_context.token) if share_context else url_for('download', file_id=file.id) }}" aria-label="Download file">Download File</a>{% endif %}
+        </div>
+      {% endif %}
+    </section>
+  </section>
+</main>
+
+<div id="preview-rename-modal" class="modal rename-item-modal" hidden aria-modal="true" role="dialog" aria-labelledby="preview-rename-title">
+  <section class="modal-card rename-item-card">
+    <h2 id="preview-rename-title">Rename item</h2>
+    <form class="rename-item-form" method="post" action="{{ url_for('rename_item') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="return_to" value="{{ workspace_return_url }}">
+      {% if share_context %}
+      <input type="hidden" name="share_context_kind" value="{{ share_context.kind }}">
+      <input type="hidden" name="share_context_token" value="{{ share_context.token }}">
+      {% endif %}
+      <input type="hidden" name="kind" value="file">
+      <input type="hidden" name="item_id" value="{{ file.id }}">
+      <div class="rename-filename-input">
+        <input id="preview-rename-item-name" name="name" value="{{ file.original_filename }}" maxlength="60" required data-original-name="{{ file.original_filename }}">
+        <span id="preview-rename-item-extension" class="rename-item-extension" hidden></span>
+      </div>
+      <div class="modal-actions">
+        <button id="cancel-preview-rename" class="button secondary" type="button">Cancel</button>
+        <button class="button primary" type="submit">Rename</button>
+      </div>
+    </form>
+  </section>
+</div>
+
+<div id="preview-move-modal" class="modal rename-item-modal" hidden aria-modal="true" role="dialog" aria-labelledby="preview-move-title">
+  <section class="modal-card rename-item-card">
+    <h2 id="preview-move-title">Move item</h2>
+    <form method="post" action="{{ url_for('move_items') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="return_to" value="{{ workspace_return_url }}">
+      {% if share_context %}
+      <input type="hidden" name="share_context_kind" value="{{ share_context.kind }}">
+      <input type="hidden" name="share_context_token" value="{{ share_context.token }}">
+      {% endif %}
+      <input type="hidden" name="items" value="file:{{ file.id }}">
+      <select id="preview-move-destination" name="destination_id" required>
+        <option value="root"{% if not file.folder_id %} hidden disabled{% endif %}>Library</option>
+        {% for folder in move_folders %}
+        {% if folder.id != file.folder_id %}
+        <option value="{{ folder.id }}">{{ display_name(folder.name) }}</option>
+        {% endif %}
+        {% endfor %}
+      </select>
+      <div class="modal-actions">
+        <button id="cancel-preview-move" class="button secondary" type="button">Cancel</button>
+        <button class="button primary" type="submit">Move</button>
+      </div>
+    </form>
+  </section>
+</div>
+
+<div id="preview-properties-modal" class="modal rename-item-modal" hidden aria-modal="true" role="dialog" aria-labelledby="preview-properties-title">
+  <section class="modal-card rename-item-card">
+    <h2 id="preview-properties-title">Properties</h2>
+    <dl class="item-properties preview-properties-list">
+      <dt>Name</dt><dd>{{ display_name(file.original_filename) }}</dd>
+      <dt>Type</dt><dd>{{ clean_file_type(file) }}</dd>
+      <dt>Size</dt><dd>{{ readable_size(file.file_size) }}</dd>
+      <dt>Location</dt><dd>{{ file_location }}</dd>
+      <dt>Uploaded</dt><dd>{{ format_datetime(file.uploaded_at) }}</dd>
+      {% if file.accessed_at %}<dt>Last accessed</dt><dd>{{ format_datetime(file.accessed_at) }}</dd>{% endif %}
+      <dt>Owner</dt><dd>{{ file.owner }}</dd>
+      <dt>Starred</dt><dd>{{ 'Yes' if file.is_starred else 'No' }}</dd>
+    </dl>
+    <div class="modal-actions">
+      <button id="close-preview-properties" class="button secondary" type="button">Close</button>
+    </div>
+  </section>
+</div>
+
+<div id="delete-modal" class="modal" hidden aria-modal="true" role="dialog" aria-labelledby="delete-title">
+  <div class="modal-card">
+    <button id="close-modal" class="close-button" type="button" aria-label="Close">X</button>
+    <h2 id="delete-title">Delete file?</h2>
+    <p>Move <strong id="delete-file-name"></strong> to Trash?</p>
+    <form id="delete-form" method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="return_to" value="{{ workspace_return_url }}">
+      <div class="modal-actions">
+        <button id="cancel-delete" class="button secondary" type="button">Cancel</button>
+        <button class="button danger" type="submit">Move to Trash</button>
+      </div>
+    </form>
+  </div>
+</div>
+<div id="share-item-modal" class="modal rename-item-modal" hidden aria-modal="true" role="dialog" aria-labelledby="share-item-title">
+  <section class="modal-card rename-item-card">
+    <div class="item-actions-header">
+      <h2 id="share-item-title">Share <span id="share-item-title-name">item</span></h2>
+      <button id="close-share-item" class="close-button" type="button" aria-label="Close share modal"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <form id="share-user-form" class="rename-item-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="rename-filename-input">
+        <input id="share-identifier" name="identifier" maxlength="255" placeholder="Username or email" required>
+        <select id="share-permission" name="permission">
+          <option value="viewer">Viewer</option>
+          <option value="editor">Editor</option>
+        </select>
+      </div>
+      <div class="modal-actions">
+        <button class="button primary" type="submit">Share</button>
+      </div>
+    </form>
+    <div id="share-users-list" class="item-properties preview-properties-list" style="margin-top: 1rem;"></div>
+    <div id="share-link-panel" class="item-properties preview-properties-list" style="margin-top: 1rem;"></div>
+  </section>
+</div>
+
+{% endblock %}
+{% block page_scripts %}
+{% if preview_kind == 'powerpoint' %}
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pptxviewjs/dist/PptxViewJS.min.js"></script>
+{% elif preview_kind == 'spreadsheet' %}
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const preview = document.getElementById('spreadsheet-preview');
+  const table = document.getElementById('spreadsheet-table');
+  const status = document.getElementById('spreadsheet-status');
+  if (!preview || !table || !status || typeof XLSX === 'undefined') return;
+
+  fetch(preview.dataset.contentUrl)
+    .then((response) => {
+      if (!response.ok) throw new Error('Unable to load spreadsheet');
+      return response.arrayBuffer();
+    })
+    .then((data) => {
+      const workbook = XLSX.read(data, { type: 'array' });
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: '' });
+      if (!rows.length) {
+        status.textContent = 'This spreadsheet is empty.';
+        return;
+      }
+      const body = rows.map((row) => '<tr>' + row.map((cell) => '<td>' + escapeHtml(cell) + '</td>').join('') + '</tr>').join('');
+      table.innerHTML = '<tbody>' + body + '</tbody>';
+      status.textContent = 'Showing ' + workbook.SheetNames[0];
+    })
+    .catch(() => { status.textContent = 'Spreadsheet preview unavailable.'; });
+
+  function escapeHtml(value) {
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+});
+</script>
+{% endif %}
+{% endblock %}

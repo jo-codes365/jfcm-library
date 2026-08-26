@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Sign In | JFCM Pantry{% endblock %}
+{% block content %}
+<main class="auth-page login-page">
+  <section class="auth-card">
+    <a class="brand" href="{{ url_for('index') }}">
+      <img src="{{ url_for('static', filename='images/JF.png') }}" alt="JFCM Pila" class="brand-logo">
+    </a>
+    <h1>Jesus First Christian Ministries - Pila</h1>
+    <p class="muted">Resources & Media Pantry</p>
+    <form method="post" class="stack-form" novalidate>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="identifier">Email or Username</label>
+      <input id="identifier" name="identifier" type="text" autocomplete="username" required>
+      <label for="password">Password</label>
+      <div class="password-field">
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+        <button class="password-toggle" type="button" data-password-toggle="password" aria-label="Show password" aria-pressed="false">
+          <i class="bi bi-eye" aria-hidden="true"></i>
+        </button>
+      </div>
+      <button class="button log" type="submit">Sign in</button>
+    </form>
+    <p class="auth-switch">New here? <a href="{{ url_for('register') }}" class="acc">Create an account</a></p>
+  </section>
+</main>
+{% endblock %}

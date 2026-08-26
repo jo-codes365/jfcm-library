@@ -1,0 +1,32 @@
+<section class="events-calendar-shell">
+  <header class="events-calendar-header">
+    <div>
+      {% if show_calendar_back_link %}
+      <a class="events-calendar-back" href="{{ url_for('dashboard', section='events') }}"><i class="bi bi-arrow-left" aria-hidden="true"></i> Events</a>
+      {% endif %}
+      <h1>{{ month_name }} {{ year }}</h1>
+    </div>
+    <div class="events-calendar-nav">
+      {% if calendar_previous_url %}<a class="button secondary events-calendar-month-button" href="{{ calendar_previous_url }}">Previous</a>{% endif %}
+      {% if calendar_next_url %}<a class="button secondary events-calendar-month-button" href="{{ calendar_next_url }}">Next</a>{% endif %}
+    </div>
+  </header>
+  <section class="events-calendar-grid" aria-label="{{ month_name }} {{ year }} calendar">
+    {% for weekday in ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] %}<strong>{{ weekday }}</strong>{% endfor %}
+    {% for week in weeks %}
+      {% set is_first_week = loop.first %}
+      {% for day in week %}
+      <div class="events-calendar-day{% if is_first_week %} is-first-week{% endif %}{% if not day %} is-empty{% endif %}">
+        {% if day %}
+        <a class="events-calendar-day-link" href="{{ calendar_day_urls.get(day, '#') }}" aria-label="Open {{ month_name }} {{ day }}, {{ year }}">
+          <span>{{ day }}</span>
+        </a>
+        {% for event in events_by_day.get(day, []) %}
+        <a class="events-calendar-event-link" href="{{ url_for('dashboard', section='events', event=event.id) }}"><img class="event-icon-inline" src="{{ url_for('static', filename='images/' ~ event_icon_file(event.event_type)) }}" alt=""> {{ display_name(event.name) }}</a>
+        {% endfor %}
+        {% endif %}
+      </div>
+      {% endfor %}
+    {% endfor %}
+  </section>
+</section>
