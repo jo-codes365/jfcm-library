@@ -111,11 +111,12 @@ def send_welcome_email(email, subject="Welcome to JFCM Pila"):
 def get_db():
     if "db" not in g:
         g.db = mysql.connector.connect(
-            host=os.getenv("DB_HOST", "localhost"),
-            port=env_int("DB_PORT", 3306),
-            database=os.getenv("DB_NAME", "file_storage"),
-            user=os.getenv("DB_USER", "root"),
-            password=os.getenv("DB_PASSWORD", ""),
+            db = mysql.connector.connect(
+            host=os.getenv("MYSQLHOST"),
+            port=int(os.getenv("MYSQLPORT", 3306)),
+            user=os.getenv("MYSQLUSER"),
+            password=os.getenv("MYSQLPASSWORD"),
+            database=os.getenv("MYSQLDATABASE"),
             autocommit=False,
         )
     return g.db
