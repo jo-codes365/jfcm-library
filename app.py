@@ -1809,6 +1809,134 @@ def download_event(event_id):
     )
 
 
+@app.get("/offline-manifest/<kind>/<int:item_id>")
+@login_or_public_share_required
+def offline_manifest(kind, item_id):
+    if kind not in {"file", "folder", "event"}:
+        abort(404)
+
+    share_context = request_share_context()
+    context_params = {}
+    if share_context:
+        context_params = {
+            "share_context_kind": share_context["kind"],
+            "share_context_token": share_context["token"],
+        }
+
+    files = []
+    folders = []
+    root = None
+    if kind == "file":
+        root = accessible_file(item_id, share_context=share_context)
+        if root:
+            files = [root]
+    elif kind == "folder":
+        root = accessible_folder(item_id, share_context=share_context)
+        if root:
+            folder_ids = [item_id, *folder_descendants(item_id, owner_id=root["user_id"])]
+            placeholders = ",".join(["%s"] * len(folder_ids))
+            cursor = get_db().cursor(dictionary=True)
+            try:
+                cursor.execute(
+                    f"SELECT id, parent_id, name FROM folders WHERE user_id = %s AND is_deleted = FALSE AND id IN ({placeholders})",
+                    (root["user_id"], *folder_ids),
+                )
+                folders = cursor.fetchall()
+                cursor.execute(
+                    f"SELECT * FROM files WHERE user_id = %s AND is_deleted = FALSE AND folder_id IN ({placeholders})",
+                    (root["user_id"], *folder_ids),
+                )
+                files = cursor.fetchall()
+            finally:
+                cursor.close()
+    else:
+        root = accessible_event(item_id, share_context=share_context)
+        if root:
+            cursor = get_db().cursor(dictionary=True)
+            try:
+                cursor.execute(
+                    "SELECT id, parent_id, name FROM folders WHERE user_id = %s AND event_id = %s AND is_deleted = FALSE",
+                    (root["user_id"], item_id),
+                )
+                folders = cursor.fetchall()
+                cursor.execute(
+                    "SELECT * FROM files WHERE user_id = %s AND event_id = %s AND is_deleted = FALSE",
+                    (root["user_id"], item_id),
+                )
+                files = cursor.fetchall()
+            finally:
+                cursor.close()
+
+    if not root:
+        abort(404)
+
+    urls = [
+        url_for("static", filename="css/style.css"),
+        url_for("static", filename="js/app.js"),
+        url_for("static", filename="images/JF.ico"),
+        url_for("static", filename="images/JF.png"),
+        url_for("static", filename="images/ss.png"),
+    ]
+    if folders:
+        urls.append(url_for("static", filename="images/Folder.png"))
+    urls.extend(url_for("static", filename=f"images/{file_type_icon(file_record)}") for file_record in files)
+    if kind == "event":
+        urls.append(url_for("static", filename=f"images/{event_icon_file(root.get('event_type'))}"))
+
+    if kind == "file":
+        urls.append(url_for("preview", file_id=item_id, **context_params))
+    elif kind == "folder":
+        if share_context and share_context["kind"] == "event":
+            urls.append(url_for("shared_event", share_token=share_context["token"], folder=item_id))
+            urls.extend(url_for("shared_event", share_token=share_context["token"], folder=folder["id"]) for folder in folders if folder["id"] != item_id)
+        elif share_context:
+            urls.append(url_for("shared_folder", share_token=share_context["token"]))
+            urls.extend(url_for("shared_folder", share_token=share_context["token"], folder=folder["id"]) for folder in folders if folder["id"] != item_id)
+        else:
+            urls.append(url_for("dashboard", folder=item_id))
+            urls.extend(url_for("dashboard", folder=folder["id"]) for folder in folders if folder["id"] != item_id)
+    else:
+        if share_context:
+            urls.append(url_for("shared_event", share_token=share_context["token"]))
+            urls.extend(url_for("shared_event", share_token=share_context["token"], folder=folder["id"]) for folder in folders)
+        else:
+            urls.append(url_for("dashboard", section="events", event=item_id))
+            urls.extend(url_for("dashboard", section="events", event=item_id, folder=folder["id"]) for folder in folders)
+
+    for file_record in files:
+        file_id = file_record["id"]
+        urls.extend([
+            url_for("preview", file_id=file_id, **context_params),
+            url_for("preview_content", file_id=file_id, **context_params),
+            url_for("download", file_id=file_id, **context_params),
+        ])
+
+    preview_kinds = {preview_kind(file_record) for file_record in files}
+    if "powerpoint" in preview_kinds:
+        urls.extend([
+            "https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js",
+            "https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js",
+            "https://cdn.jsdelivr.net/npm/pptxviewjs/dist/PptxViewJS.min.js",
+        ])
+    if "spreadsheet" in preview_kinds:
+        urls.append("https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js")
+
+    return jsonify({
+        "ok": True,
+        "item": {"kind": kind, "id": item_id},
+        "file_count": len(files),
+        "urls": list(dict.fromkeys(urls)),
+    })
+
+
+@app.get("/service-worker.js")
+def service_worker():
+    response = send_from_directory(app.static_folder, "js/service-worker.js", mimetype="application/javascript")
+    response.headers["Service-Worker-Allowed"] = "/"
+    response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 @app.get("/preview/<int:file_id>")
 def preview(file_id):
     share_context = request_share_context()

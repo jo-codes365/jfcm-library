@@ -87,6 +87,111 @@ document.addEventListener("DOMContentLoaded", function () {
     toastStack.appendChild(toast);
     window.setTimeout(function () { dismissToast(toast); }, 5000);
   }
+
+  var offlineCachePrefix = "jfcm-offline-item-v1-";
+  var offlineServiceWorkerReady = null;
+  if ("serviceWorker" in navigator && "caches" in window) {
+    offlineServiceWorkerReady = navigator.serviceWorker.register("/service-worker.js", { scope: "/" }).then(function () {
+      return navigator.serviceWorker.ready;
+    });
+  }
+
+  function offlineCacheName(manifestUrl) {
+    var value = new URL(manifestUrl, window.location.href).href;
+    var hash = 5381;
+    for (var index = 0; index < value.length; index += 1) hash = ((hash << 5) + hash) ^ value.charCodeAt(index);
+    return offlineCachePrefix + (hash >>> 0).toString(36);
+  }
+
+  async function isAccessibleOffline(manifestUrl) {
+    if (!manifestUrl || !("caches" in window)) return false;
+    var cacheNames = await caches.keys();
+    return cacheNames.includes(offlineCacheName(manifestUrl));
+  }
+
+  function renderOfflineAction(button, isOffline) {
+    if (!button) return;
+    var label = isOffline ? "Remove Offline Access" : "Make Accessible Offline";
+    var iconClass = isOffline ? "bi bi-cloud-slash" : "bi bi-cloud-arrow-down";
+    var icon = button.querySelector("i");
+    var textLabel = button.querySelector("span");
+    if (icon) icon.className = iconClass;
+    if (textLabel) textLabel.textContent = label;
+    button.dataset.offlineCached = String(isOffline);
+    button.setAttribute("aria-label", label);
+    button.setAttribute("title", label);
+  }
+
+  async function syncOfflineAction(button) {
+    if (!button || !button.dataset.offlineUrl) return;
+    renderOfflineAction(button, await isAccessibleOffline(button.dataset.offlineUrl));
+  }
+
+  async function cacheItemOffline(manifestUrl) {
+    if (!offlineServiceWorkerReady) throw new Error("Offline access is unavailable in this browser");
+    await offlineServiceWorkerReady;
+    if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function () {});
+    var absoluteManifestUrl = new URL(manifestUrl, window.location.href).href;
+    var manifestResponse = await fetch(absoluteManifestUrl, { credentials: "same-origin", cache: "no-store" });
+    if (!manifestResponse.ok) throw new Error("Offline manifest request failed");
+    var manifest = await manifestResponse.clone().json();
+    if (!manifest.ok || !Array.isArray(manifest.urls)) throw new Error("Offline manifest is invalid");
+    var cacheName = offlineCacheName(absoluteManifestUrl);
+    await caches.delete(cacheName);
+    var cache = await caches.open(cacheName);
+    try {
+      for (var url of manifest.urls) {
+        var absoluteUrl = new URL(url, window.location.href).href;
+        var request = new Request(absoluteUrl, { method: "GET", credentials: "same-origin" });
+        var response = await fetch(request);
+        if (!response.ok) throw new Error("A required offline resource could not be downloaded");
+        await cache.put(request, response.clone());
+      }
+      await cache.put(absoluteManifestUrl, manifestResponse);
+      return manifest;
+    } catch (error) {
+      await caches.delete(cacheName);
+      throw error;
+    }
+  }
+
+  function removeItemOffline(manifestUrl) {
+    return caches.delete(offlineCacheName(manifestUrl));
+  }
+
+  async function refreshOfflineActions(manifestUrl) {
+    var absoluteUrl = new URL(manifestUrl, window.location.href).href;
+    var buttons = Array.from(document.querySelectorAll("[data-offline-action='true'][data-offline-url]"));
+    await Promise.all(buttons.filter(function (button) {
+      return new URL(button.dataset.offlineUrl, window.location.href).href === absoluteUrl;
+    }).map(syncOfflineAction));
+  }
+
+  document.addEventListener("click", async function (event) {
+    var button = event.target.closest("[data-offline-action='true']");
+    if (!button || !button.dataset.offlineUrl) return;
+    event.preventDefault();
+    event.stopPropagation();
+    button.disabled = true;
+    try {
+      var wasOffline = await isAccessibleOffline(button.dataset.offlineUrl);
+      if (wasOffline) {
+        await removeItemOffline(button.dataset.offlineUrl);
+        showToast("Offline access removed.", "success");
+      } else {
+        var manifest = await cacheItemOffline(button.dataset.offlineUrl);
+        showToast((manifest.file_count || 0) + " file" + (manifest.file_count === 1 ? "" : "s") + " available offline.", "success");
+      }
+      await refreshOfflineActions(button.dataset.offlineUrl);
+      if (typeof syncBulkOfflineAction === "function") syncBulkOfflineAction();
+    } catch (error) {
+      showToast(error.message || "Offline access could not be updated.", "error");
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  document.querySelectorAll("[data-offline-action='true'][data-offline-url]").forEach(syncOfflineAction);
   var customDialogModal = document.getElementById("custom-dialog-modal");
   var customDialogTitle = document.getElementById("custom-dialog-title");
   var customDialogMessage = document.getElementById("custom-dialog-message");
@@ -1010,6 +1115,7 @@ document.addEventListener("DOMContentLoaded", function () {
   var deleteItemButton = document.getElementById("delete-item");
   var shareItemButton = document.getElementById("share-item");
   var propertiesItemButton = document.getElementById("properties-item");
+  var offlineItemButton = document.getElementById("offline-item");
   var restoreItemButton = document.getElementById("restore-item");
   var permanentDeleteItemButton = document.getElementById("permanent-delete-item");
   var itemProperties = document.getElementById("item-properties");
@@ -1197,6 +1303,11 @@ document.addEventListener("DOMContentLoaded", function () {
       openItem.hidden = !row.dataset.openUrl;
     }
     if (downloadItem) downloadItem.href = row.dataset.downloadUrl;
+    if (offlineItemButton) {
+      offlineItemButton.dataset.offlineUrl = triggerButton.dataset.offlineUrl || "";
+      offlineItemButton.hidden = !offlineItemButton.dataset.offlineUrl;
+      if (!offlineItemButton.hidden) syncOfflineAction(offlineItemButton);
+    }
     if (copyItemLink) {
       var isPublicRow = row.closest(".file-table")?.dataset.publicWorkspace === "true";
       var copyUrl = row.dataset.shareUrl || (isPublicRow && row.dataset.openUrl ? new URL(row.dataset.openUrl, window.location.href).href : "");
@@ -1710,6 +1821,8 @@ document.addEventListener("DOMContentLoaded", function () {
   var mobileSelectButton = document.getElementById("mobile-select-button");
   var fileWorkspace = document.getElementById("file-results");
   var bulkStarAction = document.getElementById("bulk-star-action");
+  var bulkOfflineAction = document.getElementById("bulk-offline-action");
+  var bulkOfflineSyncId = 0;
   function refreshBulkSelectionElements() {
     selectAll = document.getElementById("select-all");
     itemSelections = Array.from(document.querySelectorAll(".item-select"));
@@ -1727,6 +1840,29 @@ document.addEventListener("DOMContentLoaded", function () {
       updateBulkToolbar();
     }
   }
+  function selectedOfflineUrls() {
+    return Array.from(new Set(itemSelections.filter(function (input) {
+      return input.checked;
+    }).map(function (input) {
+      var trigger = input.closest("tr").querySelector(".more-actions-button[data-offline-url]");
+      return trigger ? trigger.dataset.offlineUrl : "";
+    }).filter(Boolean)));
+  }
+  async function syncBulkOfflineAction() {
+    if (!bulkOfflineAction) return;
+    var syncId = ++bulkOfflineSyncId;
+    var urls = selectedOfflineUrls();
+    if (!urls.length) {
+      renderOfflineAction(bulkOfflineAction, false);
+      return;
+    }
+    var states = await Promise.all(urls.map(isAccessibleOffline));
+    if (syncId !== bulkOfflineSyncId) return;
+    renderOfflineAction(bulkOfflineAction, states.every(Boolean));
+    var label = states.every(Boolean) ? "Remove offline access from selected items" : "Make selected items accessible offline";
+    bulkOfflineAction.setAttribute("aria-label", label);
+    bulkOfflineAction.setAttribute("title", label);
+  }
   function updateBulkToolbar() {
     var selected = itemSelections.filter(function (input) { return input.checked; });
     if (bulkToolbar) bulkToolbar.hidden = selected.length === 0;
@@ -1734,6 +1870,7 @@ document.addEventListener("DOMContentLoaded", function () {
     if (workspaceTitle) workspaceTitle.classList.toggle("bulk-selection-active", selected.length > 0);
     if (selectedCount) selectedCount.textContent = selected.length + " item" + (selected.length === 1 ? "" : "s") + " selected";
     if (selectAll) selectAll.checked = selected.length > 0 && selected.length === itemSelections.length;
+    syncBulkOfflineAction();
     if (bulkStarAction) {
       var selectedStarStates = selected.map(function (input) {
         var starToggle = input.closest("tr").querySelector(".toggle-star");
@@ -1778,6 +1915,30 @@ document.addEventListener("DOMContentLoaded", function () {
   }, true);
   if (clearBulkSelection) clearBulkSelection.addEventListener("click", function () {
     setMobileSelectMode(false);
+  });
+  if (bulkOfflineAction) bulkOfflineAction.addEventListener("click", async function (event) {
+    event.preventDefault();
+    event.stopPropagation();
+    var urls = selectedOfflineUrls();
+    if (!urls.length) return;
+    bulkOfflineAction.disabled = true;
+    try {
+      var states = await Promise.all(urls.map(isAccessibleOffline));
+      var removeAll = states.every(Boolean);
+      for (var index = 0; index < urls.length; index += 1) {
+        if (removeAll) {
+          await removeItemOffline(urls[index]);
+        } else if (!states[index]) {
+          await cacheItemOffline(urls[index]);
+        }
+      }
+      showToast(removeAll ? "Offline access removed from selected items." : "Selected items are available offline.", "success");
+      await syncBulkOfflineAction();
+    } catch (error) {
+      showToast(error.message || "Offline access could not be updated.", "error");
+    } finally {
+      bulkOfflineAction.disabled = false;
+    }
   });
   if (moveItemButton) moveItemButton.addEventListener("click", function () {
     var row = activeItemRow;

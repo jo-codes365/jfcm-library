@@ -98,6 +98,7 @@
             <strong id="selected-count">0 items selected</strong>
             {% if not is_trash %}
             <button class="row-action download-action" type="button" data-action="/items/download" aria-label="Download selected items" title="Download selected items"><i class="bi bi-download" aria-hidden="true"></i></button>
+            <button id="bulk-offline-action" class="row-action" type="button" aria-label="Make selected items accessible offline" title="Make selected items accessible offline" data-offline-icon-only="true"><i class="bi bi-cloud-arrow-down" aria-hidden="true"></i></button>
             <button id="bulk-star-action" class="row-action star-action" type="button" data-action="/items/star" data-starred="true" aria-label="Star selected items" title="Star selected items"><i class="bi bi-star" aria-hidden="true"></i></button>
             {% if not is_shared_workspace or workspace_can_edit %}
             <button id="bulk-actions-button" class="row-action more-actions-button" type="button" aria-label="Selected item actions" title="Selected item actions" aria-expanded="false"><i class="bi bi-three-dots-vertical" aria-hidden="true"></i></button>
@@ -335,7 +336,7 @@
             </div>
             {% endif %}
             <div class="table-wrap">
-              <table class="file-table" data-workspace="{{ section }}" data-recent-view="{{ 'true' if section == 'recent' else 'false' }}" data-public-workspace="{{ 'true' if is_public_workspace else 'false' }}">
+              <table class="file-table" data-workspace="{{ section }}" data-recent-view="{{ 'true' if section == 'recent' else 'false' }}" data-public-workspace="{{ 'true' if is_public_workspace or is_shared_listing else 'false' }}">
                 <thead>
                   <tr>
                     {% if not is_public_workspace and not is_shared_listing %}<th class="selection-cell"><input id="select-all" type="checkbox" aria-label="Select all"></th>{% endif %}
@@ -344,7 +345,7 @@
                     {% if section != 'recent' %}<th class="column-type">Type</th>{% endif %}
                     <th class="column-size">Size</th>
                     <th class="column-modified">{{ 'Date Deleted' if is_trash else 'Last Modified' if section == 'recent' else 'Date' }}</th>
-                    {% if is_public_workspace %}
+                    {% if is_public_workspace or is_shared_listing %}
                     <th>Actions</th>
                     {% elif not is_shared_listing %}<th>
                       <div class="sort-wrap">
@@ -368,10 +369,17 @@
                   {% else %}
                     {% set item_open_url = url_for('preview', file_id=item.id, share_context_kind=share_context.kind, share_context_token=share_context.token) if is_shared_workspace and item.kind == 'file' and not is_trash else url_for('shared_event', share_token=share_context.token, folder=item.id) if is_shared_workspace and share_context.kind == 'event' and item.kind == 'folder' and not is_trash else url_for('shared_folder', share_token=share_context.token, folder=item.id) if is_shared_workspace and share_context.kind == 'folder' and item.kind == 'folder' and not is_trash else url_for('preview', file_id=item.id) if item.kind == 'file' and not is_trash else url_for('dashboard', folder=item.id) if item.kind == 'folder' and not is_trash else '' %}
                   {% endif %}
-                  {% if is_public_workspace %}
+                  {% if is_public_workspace or is_shared_listing %}
                     {% set item_download_url = url_for('download_event', event_id=item.id, share_context_kind=item.kind, share_context_token=item.share_token) if item.kind == 'event' else url_for('download_folder', folder_id=item.id, share_context_kind=item.kind, share_context_token=item.share_token) if item.kind == 'folder' else url_for('download', file_id=item.id, share_context_kind=item.kind, share_context_token=item.share_token) %}
                   {% else %}
                     {% set item_download_url = url_for('download_event', event_id=item.id, share_context_kind=share_context.kind, share_context_token=share_context.token) if item.kind == 'event' and is_shared_workspace else url_for('download_event', event_id=item.id) if item.kind == 'event' else url_for('download_folder', folder_id=item.id, share_context_kind=share_context.kind, share_context_token=share_context.token) if is_shared_workspace and item.kind == 'folder' else url_for('download', file_id=item.id, share_context_kind=share_context.kind, share_context_token=share_context.token) if is_shared_workspace and item.kind == 'file' else url_for('download_folder', folder_id=item.id) if item.kind == 'folder' else url_for('download', file_id=item.id) %}
+                  {% endif %}
+                  {% if is_public_workspace or is_shared_listing %}
+                    {% set item_offline_url = url_for('offline_manifest', kind=item.kind, item_id=item.id, share_context_kind=item.kind, share_context_token=item.share_token) %}
+                  {% elif is_shared_workspace %}
+                    {% set item_offline_url = url_for('offline_manifest', kind=item.kind, item_id=item.id, share_context_kind=share_context.kind, share_context_token=share_context.token) %}
+                  {% else %}
+                    {% set item_offline_url = url_for('offline_manifest', kind=item.kind, item_id=item.id) %}
                   {% endif %}
                   <tr{% if item.kind == 'file' and not is_trash %} class="previewable-row" data-preview-url="{{ item_open_url }}"{% endif %} data-kind="{{ item.kind }}" data-item-id="{{ item.id }}" data-parent-id="{{ item.parent_id or '' }}" data-item-name="{{ item.name }}" data-item-display-name="{{ display_name(item.name) }}" data-item-type="{{ 'Folder' if item.kind == 'folder' else clean_file_type(item) }}" data-item-size="{{ display_item_size(item.kind, item.size if item.kind in ['folder', 'event'] else item.file_size) }}" data-item-location="{{ item.location }}" data-item-accessed="{{ format_datetime(item.accessed_at) if item.kind in ['file', 'folder'] and item.accessed_at else '—' }}" data-sort-size="{{ item.size if item.kind == 'folder' else item.file_size }}" data-item-modified="{{ format_datetime(item.date) }}" data-item-date-label="{{ 'Date deleted' if is_trash else 'Created or uploaded' }}" data-item-expiration="{{ trash_days_remaining(item.deleted_at) if is_trash and item.deleted_at else '' }}" data-open-url="{{ item_open_url }}" data-download-url="{{ item_download_url }}" data-share-url="{{ url_for('token_preview', share_token=item.share_token, _external=true) if item.kind == 'file' and item.share_token and item.is_share_link_enabled else url_for('shared_folder', share_token=item.share_token, _external=true) if item.kind == 'folder' and item.share_token and item.is_share_link_enabled else url_for('shared_event', share_token=item.share_token, _external=true) if item.kind == 'event' and item.share_token and item.is_share_link_enabled else '' }}"{% if item.kind == 'folder' and not is_trash %} data-folder-id="{{ item.id }}"{% endif %} data-file-type="{{ 'folder' if item.kind == 'folder' else file_type_key(item) }}" data-modified-date="{{ item.date.isoformat() if item.date else '' }}"{% if item.kind == 'event' %} data-item-icon="{{ item.event_type }}"{% endif %}>
                     {% if not is_public_workspace and not is_shared_listing %}<td class="selection-cell"><input class="item-select" type="checkbox" name="items" value="{{ item.kind }}:{{ item.id }}" aria-label="Select {{ display_name(item.name) }}"></td>{% endif %}
@@ -415,11 +423,11 @@
                     {% endif %}
                     <td class="column-size">{{ display_item_size(item.kind, item.size if item.kind in ['folder', 'event'] else item.file_size) }}</td>
                     <td class="column-modified">{{ format_datetime(item.date) }}{% if is_trash and item.deleted_at %}<div class="trash-retention-note">{{ trash_days_remaining(item.deleted_at) }}</div>{% endif %}</td>
-                    {% if is_public_workspace %}
+                    {% if is_public_workspace or is_shared_listing %}
                     <td class="actions">
                       <div class="actions2">
                         <a class="row-action download-action public-download-action" href="{{ item_download_url }}" aria-label="Download {{ display_name(item.name) }}" title="Download"><i class="bi bi-download" aria-hidden="true"></i></a>
-                        <button class="row-action more-actions-button" type="button" data-item-actions-target="item-actions-modal" data-item-id="{{ item.id }}" data-item-kind="{{ item.kind }}" aria-label="More actions for {{ display_name(item.name) }}" title="More actions" aria-haspopup="menu" aria-controls="item-actions-modal" aria-expanded="false"><i class="bi bi-three-dots-vertical" aria-hidden="true"></i></button>
+                        <button class="row-action more-actions-button" type="button" data-item-actions-target="item-actions-modal" data-item-id="{{ item.id }}" data-item-kind="{{ item.kind }}" data-offline-url="{{ item_offline_url }}" aria-label="More actions for {{ display_name(item.name) }}" title="More actions" aria-haspopup="menu" aria-controls="item-actions-modal" aria-expanded="false"><i class="bi bi-three-dots-vertical" aria-hidden="true"></i></button>
                       </div>
                     </td>
                     {% elif not is_shared_listing %}<td class="actions">
@@ -429,7 +437,7 @@
                         {% if not is_shared_workspace %}
                         <button class="row-action star-action toggle-star {% if item.is_starred %}is-starred{% endif %}" type="button" data-item="{{ item.kind }}:{{ item.id }}" data-starred="{{ 'false' if item.is_starred else 'true' }}" aria-label="{{ 'Remove from Starred' if item.is_starred else 'Add to Starred' }}" title="{{ 'Unstar' if item.is_starred else 'Star' }}"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 2.8l2.8 5.7 6.3.9-4.6 4.5 1.1 6.3-5.6-3-5.6 3 1.1-6.3-4.6-4.5 6.3-.9L12 2.8z"{% if item.is_starred %} fill="currentColor"{% else %} fill="none"{% endif %} stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></button>
                         {% endif %}
-                        <button class="row-action more-actions-button" type="button" data-item-actions-target="item-actions-modal" data-item-id="{{ item.id }}" data-item-kind="{{ item.kind }}" aria-label="More actions for {{ display_name(item.name) }}" title="More actions" aria-haspopup="menu" aria-controls="item-actions-modal" aria-expanded="false"><i class="bi bi-three-dots-vertical" aria-hidden="true"></i></button>
+                        <button class="row-action more-actions-button" type="button" data-item-actions-target="item-actions-modal" data-item-id="{{ item.id }}" data-item-kind="{{ item.kind }}" data-offline-url="{{ item_offline_url }}" aria-label="More actions for {{ display_name(item.name) }}" title="More actions" aria-haspopup="menu" aria-controls="item-actions-modal" aria-expanded="false"><i class="bi bi-three-dots-vertical" aria-hidden="true"></i></button>
                         {% else %}
                         <button class="row-action larger" type="button" data-row-action="restore" aria-label="Restore" title="Restore"><i class="bi bi-arrow-counterclockwise"></i></button>
                         <button class="row-action larger danger-action" type="button" data-row-action="permanent-delete" aria-label="Delete Permanently" title="Delete Permanently"><i class="bi bi-trash"></i></button>
@@ -485,16 +493,18 @@
     </div>
     <p id="item-actions-name" class="muted" style="display: none;"></p>
     <div class="item-actions-list">
-      {% if is_public_workspace %}
+      {% if is_public_workspace or is_shared_listing %}
       <a id="open-item" class="norms" href=""><i class="bi bi-arrow-up-right"></i> Open</a>
       <a id="download-item" class="norms" href=""><i class="bi bi-download"></i> Download</a>
       <!-- <button id="copy-item-link" class="norms cplnk" type="button"><i class="bi bi-link-45deg"></i> Copy Link</button> -->
+      <button id="offline-item" class="norms" type="button" data-offline-action="true"><i class="bi bi-cloud-arrow-down"></i> <span>Make Accessible Offline</span></button>
       <button id="properties-item" class="norms" type="button"><i class="bi bi-info-circle"></i> Properties</button>
       {% elif not is_trash %}
       <a id="open-item" class="norms" href=""><i class="bi bi-arrow-up-right"></i> Open</a>
       <hr style="width: 100%; margin: 3px 0; background-color: #cbd2dc; size: 0.5px;">
       <a id="download-item" class="norms" href=""><i class="bi bi-download"></i> Download</a>
       <button id="copy-item-link" class="norms cplnk" type="button"><i class="bi bi-link-45deg"></i> Copy link</button>
+      <button id="offline-item" class="norms" type="button" data-offline-action="true"><i class="bi bi-cloud-arrow-down"></i> <span>Make Accessible Offline</span></button>
       {% if workspace_can_manage_sharing or not is_shared_workspace %}
       <button id="share-item" class="norms" type="button"><i class="bi bi-people"></i> Share</button>
       {% endif %}
