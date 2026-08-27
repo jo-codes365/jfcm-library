@@ -5,6 +5,18 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.3.0/font/bootstrap-icons.css">
 
 <style>
+.public-preview-buttons {
+  flex-wrap: nowrap;
+}
+
+.public-preview-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+
 @media (max-width: 480px) {
   html,
   body {
@@ -58,8 +70,30 @@
     max-width: 100%;
   }
 
+  .preview-title p {
+    display: block;
+    margin: 3px 0 0;
+    font-size: 0.72rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
+
+  .preview-title p span {
+    font-size: inherit;
+  }
+
   .preview-buttons {
     gap: 8px;
+  }
+
+  .public-preview-buttons {
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+
+  .public-preview-button {
+    min-height: 34px;
+    padding: 6px 10px;
   }
 
   .preview-area {
@@ -188,7 +222,12 @@
           </p>
         </div>
       </div>
-      {% if not is_public_workspace %}<div class="preview-buttons">
+      {% if is_public_workspace %}
+      <div class="preview-buttons public-preview-buttons" aria-label="File actions">
+        <a class="button secondary small public-preview-button" href="{{ url_for('download', file_id=file.id, share_context_kind=share_context.kind, share_context_token=share_context.token) if share_context else url_for('download', file_id=file.id) }}"><i class="bi bi-download" aria-hidden="true"></i> Download</a>
+        <button id="preview-properties-button" class="button secondary small public-preview-button" type="button"><i class="bi bi-info-circle" aria-hidden="true"></i> Properties</button>
+      </div>
+      {% else %}<div class="preview-buttons">
         <a class="row-action preview-action download-button" href="{{ url_for('download', file_id=file.id, share_context_kind=share_context.kind, share_context_token=share_context.token) if share_context else url_for('download', file_id=file.id) }}" aria-label="Download file" title="Download"><i class="bi bi-download"></i></a>
         {% if file.is_share_link_enabled or (share_context and share_context.kind == 'file') %}
         <button id="copy-link" class="row-action preview-action cplnk copy-button" type="button" data-share-url="{{ url_for('token_preview', share_token=file.share_token, _external=true) }}" aria-label="Copy link" title="Copy link"><i class="bi bi-link-45deg"></i></button>
