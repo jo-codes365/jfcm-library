@@ -3120,3 +3120,49 @@ hr {
     justify-content: flex-start;
   }
 }
+
+/* Responsive font sizes for smaller screens */
+@media (max-width: 480px) {
+    html {
+        font-size: 14px;
+    }
+
+    body {
+        font-size: 0.875rem;
+    }
+
+    h1 {
+        font-size: 1.5rem;
+    }
+
+    h2 {
+        font-size: 1.25rem;
+    }
+
+    h3 {
+        font-size: 1.125rem;
+    }
+
+    h4,
+    h5,
+    h6 {
+        font-size: 1rem;
+    }
+
+    p,
+    span,
+    label,
+    input,
+    textarea,
+    select,
+    button,
+    a,
+    td,
+    th {
+        font-size: 0.875rem;
+    }
+
+    small {
+        font-size: 0.75rem;
+    }
+}
