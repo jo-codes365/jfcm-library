@@ -819,6 +819,8 @@ document.addEventListener("DOMContentLoaded", function () {
       sortDirectionButton = nextResults.querySelector("#sort-direction-button");
       sortMenu = nextResults.querySelector("#sort-menu");
       sortOptions = sortMenu ? Array.from(sortMenu.querySelectorAll("button[data-sort-field]")) : [];
+      refreshBulkSelectionElements();
+      setMobileSelectMode(false);
       loadedSearchQuery = requestedSearchQuery;
       bindFileRowPreviews();
       bindSortControls();
@@ -1683,7 +1685,26 @@ document.addEventListener("DOMContentLoaded", function () {
   var selectedCount = document.getElementById("selected-count");
   var selectAll = document.getElementById("select-all");
   var itemSelections = Array.from(document.querySelectorAll(".item-select"));
+  var mobileSelectButton = document.getElementById("mobile-select-button");
+  var fileWorkspace = document.getElementById("file-results");
   var bulkStarAction = document.getElementById("bulk-star-action");
+  function refreshBulkSelectionElements() {
+    selectAll = document.getElementById("select-all");
+    itemSelections = Array.from(document.querySelectorAll(".item-select"));
+    mobileSelectButton = document.getElementById("mobile-select-button");
+    fileWorkspace = document.getElementById("file-results");
+  }
+  function setMobileSelectMode(enabled) {
+    refreshBulkSelectionElements();
+    if (!fileWorkspace || !mobileSelectButton) return;
+    fileWorkspace.classList.toggle("mobile-select-mode", enabled);
+    mobileSelectButton.setAttribute("aria-pressed", String(enabled));
+    mobileSelectButton.textContent = enabled ? "Done" : "Select";
+    if (!enabled) {
+      itemSelections.forEach(function (input) { input.checked = false; });
+      updateBulkToolbar();
+    }
+  }
   function updateBulkToolbar() {
     var selected = itemSelections.filter(function (input) { return input.checked; });
     if (bulkToolbar) bulkToolbar.hidden = selected.length === 0;
@@ -1707,14 +1728,34 @@ document.addEventListener("DOMContentLoaded", function () {
       }
     }
   }
-  itemSelections.forEach(function (input) { input.addEventListener("change", updateBulkToolbar); });
-  if (selectAll) selectAll.addEventListener("change", function () {
-    itemSelections.forEach(function (input) { input.checked = selectAll.checked; });
+  document.addEventListener("change", function (event) {
+    if (event.target.matches(".item-select")) {
+      refreshBulkSelectionElements();
+      updateBulkToolbar();
+      return;
+    }
+    if (event.target.id !== "select-all") return;
+    refreshBulkSelectionElements();
+    itemSelections.forEach(function (input) { input.checked = event.target.checked; });
     updateBulkToolbar();
   });
+  document.addEventListener("click", function (event) {
+    var selectButton = event.target.closest("#mobile-select-button");
+    if (!selectButton) return;
+    setMobileSelectMode(selectButton.getAttribute("aria-pressed") !== "true");
+  });
+  document.addEventListener("click", function (event) {
+    var row = event.target.closest(".file-workspace.mobile-select-mode .file-table tbody tr");
+    if (!row || event.target.closest("button, input, label, select, textarea, .actions")) return;
+    var selection = row.querySelector(".item-select");
+    if (!selection) return;
+    event.preventDefault();
+    event.stopPropagation();
+    selection.checked = !selection.checked;
+    selection.dispatchEvent(new Event("change", { bubbles: true }));
+  }, true);
   if (clearBulkSelection) clearBulkSelection.addEventListener("click", function () {
-    itemSelections.forEach(function (input) { input.checked = false; });
-    updateBulkToolbar();
+    setMobileSelectMode(false);
   });
   if (moveItemButton) moveItemButton.addEventListener("click", function () {
     var row = activeItemRow;
