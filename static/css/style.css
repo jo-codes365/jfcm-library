@@ -1600,6 +1600,12 @@ table tbody tr:nth-child(even) {
   display: inline-flex;
   align-items: center;
 }
+.new-button > i {
+  display: inline-grid;
+  align-self: center;
+  place-items: center;
+  line-height: 1;
+}
 .new {
   color: var(--ink);
   background-color: #fff;
