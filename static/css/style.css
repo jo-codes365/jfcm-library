@@ -3220,8 +3220,25 @@ hr {
         display: flex;
         grid-column: 1 / -1;
         justify-content: flex-start;
+        width: auto !important;
+        max-width: none !important;
         min-width: 0;
+        overflow: visible;
         text-align: left;
+    }
+
+    .file-table .file-name > a,
+    .file-table .file-name > span {
+        display: flex;
+        align-items: center;
+        width: 100%;
+        min-width: 0;
+    }
+
+    .file-table .file-name .file-type-icon,
+    .file-table .file-name .event-icon-inline {
+        display: block;
+        flex: 0 0 auto;
     }
 
     .file-table .column-modified {
