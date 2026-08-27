@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#ffffff">
+  <title>JFCM Pantry — Offline</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      min-height: 100vh;
+      min-height: 100dvh;
+      margin: 0;
+      padding: max(24px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
+      display: grid;
+      place-items: center;
+      color: #253247;
+      background: #f4f7fb;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main { width: min(100%, 560px); padding: 30px; border-radius: 18px; background: #fff; box-shadow: 0 12px 38px rgba(37, 50, 71, .11); }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand img { width: 42px; height: 42px; object-fit: contain; }
+    h1 { margin: 0; font-size: 1.45rem; }
+    p { margin: 14px 0 0; color: #667085; line-height: 1.55; }
+    ul { margin: 22px 0 0; padding: 0; list-style: none; }
+    li + li { border-top: 1px solid #e7ebf1; }
+    a { display: flex; align-items: center; gap: 10px; padding: 14px 4px; color: #245aa8; font-weight: 600; text-decoration: none; overflow-wrap: anywhere; }
+    a::before { content: "\2193"; flex: 0 0 auto; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; color: #fff; background: #245aa8; }
+    .empty { padding: 18px 0 0; }
+    button { margin-top: 20px; border: 0; border-radius: 9px; padding: 10px 15px; color: #fff; background: #245aa8; font: inherit; font-weight: 600; cursor: pointer; }
+    @media (max-width: 480px) { main { padding: 24px 20px; } }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="brand">
+      <img src="/static/images/JF.png" alt="">
+      <h1>You’re offline</h1>
+    </div>
+    <p>Only files, folders, and Events marked <strong>Save Offline</strong> are available without a connection.</p>
+    <ul id="offline-items" hidden></ul>
+    <p class="empty" id="offline-empty">No saved offline items are available for this session.</p>
+    <button type="button" onclick="location.reload()">Try again</button>
+  </main>
+  <script>
+    (async function () {
+      if (!("caches" in window)) return;
+      var scope = "public";
+      try { scope = localStorage.getItem("jfcmOfflineScopeSegment") || "public"; } catch (_error) {}
+      var publicPrefix = "jfcm-offline-item-v2-public-";
+      var privatePrefix = scope.indexOf("private-") === 0 ? "jfcm-offline-item-v2-" + scope + "-" : "";
+      var names = (await caches.keys()).filter(function (name) {
+        return name.indexOf(publicPrefix) === 0 || (privatePrefix && name.indexOf(privatePrefix) === 0);
+      });
+      var items = [];
+      for (var name of names) {
+        var cache = await caches.open(name);
+        var requests = await cache.keys();
+        var manifestRequest = requests.find(function (request) { return new URL(request.url).pathname.indexOf("/offline-manifest/") === 0; });
+        if (!manifestRequest) continue;
+        try {
+          var manifest = await (await cache.match(manifestRequest)).json();
+          if (manifest.open_url) items.push({ name: (manifest.item && manifest.item.name) || "Saved item", url: manifest.open_url });
+        } catch (_error) {}
+      }
+      if (!items.length) return;
+      var list = document.getElementById("offline-items");
+      document.getElementById("offline-empty").hidden = true;
+      list.hidden = false;
+      items.forEach(function (item) {
+        var entry = document.createElement("li");
+        var link = document.createElement("a");
+        link.href = item.url;
+        link.textContent = item.name;
+        entry.appendChild(link);
+        list.appendChild(entry);
+      });
+    })();
+  </script>
+</body>
+</html>

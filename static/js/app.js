@@ -88,19 +88,38 @@ document.addEventListener("DOMContentLoaded", function () {
     window.setTimeout(function () { dismissToast(toast); }, 5000);
   }
 
-  var offlineCachePrefix = "jfcm-offline-item-v1-";
+  function offlineHash(value) {
+    var hash = 5381;
+    for (var index = 0; index < value.length; index += 1) hash = ((hash << 5) + hash) ^ value.charCodeAt(index);
+    return (hash >>> 0).toString(36);
+  }
+
+  var offlineScopeMeta = document.querySelector("meta[name='offline-cache-scope']");
+  var offlineScopeValue = offlineScopeMeta ? offlineScopeMeta.content : "public";
+  var offlineScopeSegment = offlineScopeValue.indexOf("private:") === 0 ? "private-" + offlineHash(offlineScopeValue) : "public";
+  var offlineCachePrefix = "jfcm-offline-item-v2-" + offlineScopeSegment + "-";
+  try {
+    window.localStorage.setItem("jfcmOfflineScopeSegment", offlineScopeSegment);
+  } catch (_error) {}
   var offlineServiceWorkerReady = null;
   if ("serviceWorker" in navigator && "caches" in window) {
     offlineServiceWorkerReady = navigator.serviceWorker.register("/service-worker.js", { scope: "/" }).then(function () {
       return navigator.serviceWorker.ready;
+    }).then(async function (registration) {
+      var cacheNames = await caches.keys();
+      var currentPrivatePrefix = offlineScopeSegment.indexOf("private-") === 0 ? "jfcm-offline-item-v2-" + offlineScopeSegment + "-" : "";
+      await Promise.all(cacheNames.filter(function (name) {
+        return name.indexOf("jfcm-offline-item-v2-private-") === 0 && (!currentPrivatePrefix || name.indexOf(currentPrivatePrefix) !== 0);
+      }).map(function (name) { return caches.delete(name); }));
+      var worker = navigator.serviceWorker.controller || registration.active || registration.waiting;
+      if (worker) worker.postMessage({ type: "SET_OFFLINE_SCOPE", scope: offlineScopeSegment });
+      return registration;
     });
   }
 
   function offlineCacheName(manifestUrl) {
     var value = new URL(manifestUrl, window.location.href).href;
-    var hash = 5381;
-    for (var index = 0; index < value.length; index += 1) hash = ((hash << 5) + hash) ^ value.charCodeAt(index);
-    return offlineCachePrefix + (hash >>> 0).toString(36);
+    return offlineCachePrefix + offlineHash(value);
   }
 
   async function isAccessibleOffline(manifestUrl) {
@@ -111,7 +130,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function renderOfflineAction(button, isOffline) {
     if (!button) return;
-    var label = isOffline ? "Remove Offline Access" : "Save Offline";
+    var label = isOffline ? "Unsave Offline" : "Save Offline";
     var iconClass = isOffline ? "bi bi-cloud-slash" : "bi bi-cloud-arrow-down";
     var icon = button.querySelector("i");
     var textLabel = button.querySelector("span");
@@ -250,6 +269,7 @@ document.addEventListener("DOMContentLoaded", function () {
   var logoutModal = document.getElementById("logout-modal");
   if (logoutModal) logoutModal.style.zIndex = "35";
   var cancelLogout = document.getElementById("cancel-logout");
+  var confirmLogout = document.getElementById("confirm-logout");
   if (logoutLink && logoutModal) {
     logoutLink.addEventListener("click", function (event) {
       event.preventDefault();
@@ -262,6 +282,24 @@ document.addEventListener("DOMContentLoaded", function () {
     logoutModal.addEventListener("click", function (event) {
       if (event.target === logoutModal) logoutModal.hidden = true;
     });
+    if (confirmLogout) {
+      confirmLogout.addEventListener("click", async function (event) {
+        event.preventDefault();
+        var destination = confirmLogout.href;
+        try {
+          if ("caches" in window) {
+            var names = await caches.keys();
+            await Promise.all(names.filter(function (name) {
+              return name.indexOf("jfcm-offline-item-v2-private-") === 0;
+            }).map(function (name) { return caches.delete(name); }));
+          }
+          window.localStorage.setItem("jfcmOfflineScopeSegment", "public");
+          var worker = navigator.serviceWorker && navigator.serviceWorker.controller;
+          if (worker) worker.postMessage({ type: "SET_OFFLINE_SCOPE", scope: "public" });
+        } catch (_error) {}
+        window.location.href = destination;
+      });
+    }
   }
 
   var eventsToggle = document.getElementById("events-toggle");
@@ -1859,7 +1897,7 @@ document.addEventListener("DOMContentLoaded", function () {
     var states = await Promise.all(urls.map(isAccessibleOffline));
     if (syncId !== bulkOfflineSyncId) return;
     renderOfflineAction(bulkOfflineAction, states.every(Boolean));
-    var label = states.every(Boolean) ? "Remove offline access from selected items" : "Make selected items accessible offline";
+    var label = states.every(Boolean) ? "Unsave offline access from selected items" : "Make selected items accessible offline";
     bulkOfflineAction.setAttribute("aria-label", label);
     bulkOfflineAction.setAttribute("title", label);
   }

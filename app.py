@@ -39,6 +39,7 @@ MAX_FILE_SIZE_MB = env_int("MAX_FILE_SIZE_MB", 50)
 TRASH_RETENTION_DAYS = 30
 SESSION_INACTIVITY_DAYS = 7
 SESSION_LAST_ACTIVITY_KEY = "last_activity_at"
+OFFLINE_CACHE_SCOPE_KEY = "offline_cache_scope"
 UPLOAD_FOLDER = Path(os.getenv("UPLOAD_FOLDER", "uploads"))
 if not UPLOAD_FOLDER.is_absolute():
     UPLOAD_FOLDER = BASE_DIR / UPLOAD_FOLDER
@@ -146,6 +147,14 @@ def touch_authenticated_session():
     session[SESSION_LAST_ACTIVITY_KEY] = datetime.now().isoformat()
     session.permanent = True
     session.modified = True
+
+
+def current_offline_cache_scope():
+    if "user_id" not in session:
+        return "public"
+    if not session.get(OFFLINE_CACHE_SCOPE_KEY):
+        session[OFFLINE_CACHE_SCOPE_KEY] = secrets.token_urlsafe(24)
+    return f"private:{session[OFFLINE_CACHE_SCOPE_KEY]}"
 
 
 def session_is_expired():
@@ -1128,6 +1137,7 @@ def utility_processor():
         "event_icon_file": event_icon_file,
         "event_type_label": event_type_label,
         "trash_days_remaining": trash_days_remaining,
+        "offline_cache_scope": current_offline_cache_scope(),
     }
 
 
@@ -1213,6 +1223,7 @@ def login_post():
                 session.clear()
                 session["user_id"] = user["id"]
                 session["username"] = user["username"] or user["email"]
+                session[OFFLINE_CACHE_SCOPE_KEY] = secrets.token_urlsafe(24)
                 touch_authenticated_session()
                 return redirect(url_for("dashboard"))
         except MySQLError:
@@ -1883,24 +1894,31 @@ def offline_manifest(kind, item_id):
     if kind == "event":
         urls.append(url_for("static", filename=f"images/{event_icon_file(root.get('event_type'))}"))
 
+    root_open_url = ""
     if kind == "file":
-        urls.append(url_for("preview", file_id=item_id, **context_params))
+        root_open_url = url_for("preview", file_id=item_id, **context_params)
+        urls.append(root_open_url)
     elif kind == "folder":
         if share_context and share_context["kind"] == "event":
-            urls.append(url_for("shared_event", share_token=share_context["token"], folder=item_id))
+            root_open_url = url_for("shared_event", share_token=share_context["token"], folder=item_id)
+            urls.append(root_open_url)
             urls.extend(url_for("shared_event", share_token=share_context["token"], folder=folder["id"]) for folder in folders if folder["id"] != item_id)
         elif share_context:
-            urls.append(url_for("shared_folder", share_token=share_context["token"]))
+            root_open_url = url_for("shared_folder", share_token=share_context["token"])
+            urls.append(root_open_url)
             urls.extend(url_for("shared_folder", share_token=share_context["token"], folder=folder["id"]) for folder in folders if folder["id"] != item_id)
         else:
-            urls.append(url_for("dashboard", folder=item_id))
+            root_open_url = url_for("dashboard", folder=item_id)
+            urls.append(root_open_url)
             urls.extend(url_for("dashboard", folder=folder["id"]) for folder in folders if folder["id"] != item_id)
     else:
         if share_context:
-            urls.append(url_for("shared_event", share_token=share_context["token"]))
+            root_open_url = url_for("shared_event", share_token=share_context["token"])
+            urls.append(root_open_url)
             urls.extend(url_for("shared_event", share_token=share_context["token"], folder=folder["id"]) for folder in folders)
         else:
-            urls.append(url_for("dashboard", section="events", event=item_id))
+            root_open_url = url_for("dashboard", section="events", event=item_id)
+            urls.append(root_open_url)
             urls.extend(url_for("dashboard", section="events", event=item_id, folder=folder["id"]) for folder in folders)
 
     for file_record in files:
@@ -1923,7 +1941,12 @@ def offline_manifest(kind, item_id):
 
     return jsonify({
         "ok": True,
-        "item": {"kind": kind, "id": item_id},
+        "item": {
+            "kind": kind,
+            "id": item_id,
+            "name": root.get("original_filename") if kind == "file" else root.get("name"),
+        },
+        "open_url": root_open_url,
         "file_count": len(files),
         "urls": list(dict.fromkeys(urls)),
     })
