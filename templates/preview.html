@@ -220,7 +220,7 @@
           <button id="preview-more-button" class="row-action preview-action" type="button" aria-label="More actions" title="More actions" aria-expanded="false" aria-controls="preview-more-menu"><i class="bi bi-three-dots-vertical"></i></button>
           <div id="preview-more-menu" class="preview-more-menu" hidden>
             <a class="norms" href="{{ url_for('download', file_id=file.id, share_context_kind=share_context.kind, share_context_token=share_context.token) if share_context else url_for('download', file_id=file.id) }}"><i class="bi bi-download"></i> Download</a>
-            <button id="preview-offline-action" class="norms" type="button" data-offline-action="true" data-offline-url="{{ preview_offline_url }}"><i class="bi bi-cloud-arrow-down"></i> <span>Make Accessible Offline</span></button>
+            <button id="preview-offline-action" class="norms" type="button" data-offline-action="true" data-offline-url="{{ preview_offline_url }}"><i class="bi bi-cloud-arrow-down"></i> <span>Save Offline</span></button>
             {% if file.is_share_link_enabled or (share_context and share_context.kind == 'file') %}
             <button id="preview-copy-action" class="norms cplnk" type="button" data-share-url="{{ url_for('token_preview', share_token=file.share_token, _external=true) }}"><i class="bi bi-link-45deg"></i> Copy link</button>
             {% endif %}

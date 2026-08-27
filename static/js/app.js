@@ -111,7 +111,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function renderOfflineAction(button, isOffline) {
     if (!button) return;
-    var label = isOffline ? "Remove Offline Access" : "Make Accessible Offline";
+    var label = isOffline ? "Remove Offline Access" : "Save Offline";
     var iconClass = isOffline ? "bi bi-cloud-slash" : "bi bi-cloud-arrow-down";
     var icon = button.querySelector("i");
     var textLabel = button.querySelector("span");
