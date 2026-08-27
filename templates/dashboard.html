@@ -16,7 +16,7 @@
     </nav>
     <div class="sidebar-footer">
       <a class="sidebar-link secondary" href="{{ url_for('login') }}"><i class="bi bi-box-arrow-in-right"></i> Sign In</a>
-      <a class="sidebar-link" href="{{ url_for('register') }}"><i class="bi bi-person-plus"></i> Sign Up</a>
+      <!-- <a class="sidebar-link" href="{{ url_for('register') }}"><i class="bi bi-person-plus"></i> Sign Up</a> -->
     </div>
     {% else %}
     {% if not is_shared_workspace %}
@@ -77,7 +77,7 @@
       {% if is_public_workspace %}
       <nav class="workspace-header-auth" aria-label="Account actions">
         <a class="button primary" href="{{ url_for('login') }}">Sign In</a>
-        <a class="button secondary" href="{{ url_for('register') }}">Sign Up</a>
+        <!-- <a class="button secondary" href="{{ url_for('register') }}">Sign Up</a> -->
       </nav>
       {% elif not is_shared_listing %}
       <button id="events-calendar-button" class="button secondary events-calendar-button" type="button" aria-haspopup="dialog" aria-controls="events-calendar-modal" aria-expanded="false" title="Events Calendar"><i class="bi bi-calendar-date" aria-hidden="true"></i></button>

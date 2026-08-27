@@ -42,6 +42,7 @@ SESSION_LAST_ACTIVITY_KEY = "last_activity_at"
 UPLOAD_FOLDER = Path(os.getenv("UPLOAD_FOLDER", "uploads"))
 if not UPLOAD_FOLDER.is_absolute():
     UPLOAD_FOLDER = BASE_DIR / UPLOAD_FOLDER
+UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
 
 app = Flask(__name__)
 app.config.update(
@@ -111,13 +112,13 @@ def send_welcome_email(email, subject="Welcome to JFCM Pila"):
 def get_db():
     if "db" not in g:
         g.db = mysql.connector.connect(
-            host=os.getenv("DB_HOST", "localhost"),
-            port=env_int("DB_PORT", 3306),
-            database=os.getenv("DB_NAME", "file_storage"),
-            user=os.getenv("DB_USER", "root"),
-            password=os.getenv("DB_PASSWORD", ""),
+            host=os.getenv("MYSQLHOST"),
+            port=int(os.getenv("MYSQLPORT", 3306)),
+            user=os.getenv("MYSQLUSER"),
+            password=os.getenv("MYSQLPASSWORD"),
+            database=os.getenv("MYSQLDATABASE"),
             autocommit=False,
-        )
+            )
     return g.db
 
 
