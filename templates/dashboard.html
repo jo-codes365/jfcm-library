@@ -419,7 +419,7 @@
                     <td class="actions">
                       <div class="actions2">
                         <a class="row-action download-action public-download-action" href="{{ item_download_url }}" aria-label="Download {{ display_name(item.name) }}" title="Download"><i class="bi bi-download" aria-hidden="true"></i></a>
-                        <button class="row-action more-actions-button" type="button" aria-label="More actions for {{ display_name(item.name) }}" title="More actions" aria-haspopup="menu" aria-expanded="false"><i class="bi bi-three-dots-vertical" aria-hidden="true"></i></button>
+                        <button class="row-action more-actions-button" type="button" data-item-actions-target="item-actions-modal" data-item-id="{{ item.id }}" data-item-kind="{{ item.kind }}" aria-label="More actions for {{ display_name(item.name) }}" title="More actions" aria-haspopup="menu" aria-controls="item-actions-modal" aria-expanded="false"><i class="bi bi-three-dots-vertical" aria-hidden="true"></i></button>
                       </div>
                     </td>
                     {% elif not is_shared_listing %}<td class="actions">
@@ -429,7 +429,7 @@
                         {% if not is_shared_workspace %}
                         <button class="row-action star-action toggle-star {% if item.is_starred %}is-starred{% endif %}" type="button" data-item="{{ item.kind }}:{{ item.id }}" data-starred="{{ 'false' if item.is_starred else 'true' }}" aria-label="{{ 'Remove from Starred' if item.is_starred else 'Add to Starred' }}" title="{{ 'Unstar' if item.is_starred else 'Star' }}"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 2.8l2.8 5.7 6.3.9-4.6 4.5 1.1 6.3-5.6-3-5.6 3 1.1-6.3-4.6-4.5 6.3-.9L12 2.8z"{% if item.is_starred %} fill="currentColor"{% else %} fill="none"{% endif %} stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></button>
                         {% endif %}
-                        <button class="row-action more-actions-button" type="button" aria-label="More actions" title="More actions"><i class="bi bi-three-dots-vertical"></i></button>
+                        <button class="row-action more-actions-button" type="button" data-item-actions-target="item-actions-modal" data-item-id="{{ item.id }}" data-item-kind="{{ item.kind }}" aria-label="More actions for {{ display_name(item.name) }}" title="More actions" aria-haspopup="menu" aria-controls="item-actions-modal" aria-expanded="false"><i class="bi bi-three-dots-vertical" aria-hidden="true"></i></button>
                         {% else %}
                         <button class="row-action larger" type="button" data-row-action="restore" aria-label="Restore" title="Restore"><i class="bi bi-arrow-counterclockwise"></i></button>
                         <button class="row-action larger danger-action" type="button" data-row-action="permanent-delete" aria-label="Delete Permanently" title="Delete Permanently"><i class="bi bi-trash"></i></button>

@@ -1037,15 +1037,19 @@ document.addEventListener("DOMContentLoaded", function () {
   var closeShareItem = document.getElementById("close-share-item");
   var previewShareButton = document.getElementById("preview-share-button");
   var activeItemRow = null;
+  var activeItemActionButton = null;
   var activeShareTarget = null;
   var starredRemovalTimers = {};
   function closeItemActions() {
     if (itemActionsModal) itemActionsModal.hidden = true;
     if (itemProperties) itemProperties.hidden = true;
-    if (activeItemRow) {
-      var activeButton = activeItemRow.querySelector(".more-actions-button");
-      if (activeButton) activeButton.setAttribute("aria-expanded", "false");
+    if (activeItemActionButton) activeItemActionButton.setAttribute("aria-expanded", "false");
+    if (itemActionsModal) {
+      delete itemActionsModal.dataset.itemId;
+      delete itemActionsModal.dataset.itemKind;
     }
+    activeItemActionButton = null;
+    activeItemRow = null;
   }
   function getSelectionForRow(row) {
     if (!row) return null;
@@ -1161,10 +1165,9 @@ document.addEventListener("DOMContentLoaded", function () {
   }
   function positionItemActions() {
     if (!itemActionsModal || itemActionsModal.hidden || !activeItemRow) return;
-    var actionButton = activeItemRow.querySelector(".more-actions-button");
     var card = itemActionsModal.querySelector(".item-actions-card");
-    if (!actionButton || !card) return;
-    var buttonRect = actionButton.getBoundingClientRect();
+    if (!activeItemActionButton || !card) return;
+    var buttonRect = activeItemActionButton.getBoundingClientRect();
     var gap = 8;
     var margin = 8;
     var left = buttonRect.right - card.offsetWidth;
@@ -1175,9 +1178,15 @@ document.addEventListener("DOMContentLoaded", function () {
     card.style.left = Math.max(margin, Math.min(left, window.innerWidth - card.offsetWidth - margin)) + "px";
     card.style.top = Math.max(margin, Math.min(top, window.innerHeight - card.offsetHeight - margin)) + "px";
   }
-  function openItemActions(row) {
-    if (!itemActionsModal || !row) return;
+  function openItemActions(row, triggerButton) {
+    if (!itemActionsModal || !row || !triggerButton || !row.dataset.itemId || !row.dataset.kind) return;
+    if (activeItemActionButton && activeItemActionButton !== triggerButton) {
+      activeItemActionButton.setAttribute("aria-expanded", "false");
+    }
     activeItemRow = row;
+    activeItemActionButton = triggerButton;
+    itemActionsModal.dataset.itemId = row.dataset.itemId;
+    itemActionsModal.dataset.itemKind = row.dataset.kind;
     var name = row.dataset.itemDisplayName || row.dataset.itemName || "Item";
     itemActionsName.textContent = name;
     itemActionsTitle.textContent = row.dataset.kind === "folder" ? "Folder actions" : row.dataset.kind === "event" ? "Event actions" : "File actions";
@@ -1199,8 +1208,7 @@ document.addEventListener("DOMContentLoaded", function () {
       starItemButton.innerHTML = isStarred ? '<i class="bi bi-star-fill"></i> Unstar' : '<i class="bi bi-star"></i> Star';
     }
     itemActionsModal.hidden = false;
-    var actionButton = row.querySelector(".more-actions-button");
-    if (actionButton) actionButton.setAttribute("aria-expanded", "true");
+    activeItemActionButton.setAttribute("aria-expanded", "true");
     positionItemActions();
   }
   function submitStarUpdate(selection, starToggle) {
@@ -1259,23 +1267,25 @@ document.addEventListener("DOMContentLoaded", function () {
   }
   document.addEventListener("click", function (event) {
     var button = event.target.closest(".file-table .more-actions-button");
-    if (!button) return;
-    event.stopPropagation();
-    var row = button.closest("tr");
-    if (itemActionsModal && !itemActionsModal.hidden && activeItemRow === row) {
-      closeItemActions();
+    if (button) {
+      event.preventDefault();
+      var targetModal = document.getElementById(button.dataset.itemActionsTarget || "");
+      var row = button.closest(".file-table tbody tr");
+      if (targetModal !== itemActionsModal || !row || button.dataset.itemId !== row.dataset.itemId || button.dataset.itemKind !== row.dataset.kind) return;
+      if (itemActionsModal && !itemActionsModal.hidden && activeItemRow === row && activeItemActionButton === button) {
+        closeItemActions();
+        return;
+      }
+      openItemActions(row, button);
       return;
     }
-    openItemActions(row);
+    if (!itemActionsModal || itemActionsModal.hidden || !activeItemRow) return;
+    var card = itemActionsModal.querySelector(".item-actions-card");
+    if (card && !card.contains(event.target)) closeItemActions();
   });
   document.getElementById("close-item-actions")?.addEventListener("click", closeItemActions);
   if (itemActionsModal) itemActionsModal.addEventListener("click", function (event) {
     if (event.target === itemActionsModal) closeItemActions();
-  });
-  document.addEventListener("click", function (event) {
-    if (!itemActionsModal || itemActionsModal.hidden || !activeItemRow) return;
-    var card = itemActionsModal.querySelector(".item-actions-card");
-    if (card && !card.contains(event.target)) closeItemActions();
   });
   window.addEventListener("resize", positionItemActions);
   window.addEventListener("scroll", positionItemActions, true);
