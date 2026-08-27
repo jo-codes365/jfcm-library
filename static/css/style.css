@@ -3328,7 +3328,7 @@ hr {
     display: flex;
     width: min(82vw, 300px);
     height: 100dvh;
-    padding-top: 68px;
+    padding-top: 24px;
     overflow-y: auto;
     box-shadow: 8px 0 28px rgba(15, 23, 42, 0.22);
     transform: translateX(-105%);

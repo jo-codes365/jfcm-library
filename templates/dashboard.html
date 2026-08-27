@@ -450,6 +450,9 @@
               {% if is_global_search %}
               <h3>No matching items</h3>
               <p style="margin-top: 20px;">Try a different search term.</p>
+              {% elif section == 'shared' %}
+              <h3>Nothing shared with you yet</h3>
+              <p style="margin-top: 20px;">Files and folders shared with you will appear here.</p>
               {% elif is_event_date_workspace %}
               <h3>No Events scheduled for this date</h3>
               <p style="margin-top: 20px;">Create an Event to start organizing files for this day.</p>
