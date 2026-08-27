@@ -2775,19 +2775,25 @@ button {
 }
 .file-table[data-public-workspace="true"] th:nth-child(1),
 .file-table[data-public-workspace="true"] td:nth-child(1) {
-  width: 52%;
+  width: 44%;
 }
 .file-table[data-public-workspace="true"] th:nth-child(2),
 .file-table[data-public-workspace="true"] td:nth-child(2) {
-  width: 18%;
+  width: 16%;
 }
 .file-table[data-public-workspace="true"] th:nth-child(3),
 .file-table[data-public-workspace="true"] td:nth-child(3) {
-  width: 14%;
+  width: 12%;
 }
 .file-table[data-public-workspace="true"] th:nth-child(4),
 .file-table[data-public-workspace="true"] td:nth-child(4) {
   width: 16%;
+}
+.file-table[data-public-workspace="true"] th:nth-child(5),
+.file-table[data-public-workspace="true"] td:nth-child(5) {
+  width: 12%;
+  white-space: nowrap;
+  text-align: right;
 }
 .file-table[data-public-workspace="true"] .file-name {
   max-width: 0;
@@ -2900,6 +2906,12 @@ button {
 }
 .download-action:hover {
   color: #6FABFF;
+}
+.public-download-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.82rem;
 }
 .star-action {
   display: inline-grid;
@@ -3138,7 +3150,8 @@ hr {
         display: none;
     }
 
-    .workspace-title h1 {
+    .workspace-title h1,
+    .workspace-title .vr {
         display: none;
     }
 

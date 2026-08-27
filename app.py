@@ -175,6 +175,27 @@ def login_required(view):
     return wrapped
 
 
+def login_or_public_share_required(view):
+    """Allow an active signed-in session or a valid public share context."""
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        share_context = request_share_context()
+        if "user_id" not in session:
+            if not share_context:
+                flash("Please sign in to continue.", "error")
+                return redirect(url_for("login"))
+        elif session_is_expired():
+            session.clear()
+            if not share_context:
+                flash("Your session expired after 7 days of inactivity. Please sign in again.", "error")
+                return redirect(url_for("login"))
+        else:
+            touch_authenticated_session()
+            purge_expired_trash(session["user_id"])
+        return view(*args, **kwargs)
+    return wrapped
+
+
 PERMISSION_LEVELS = {"viewer": 1, "editor": 2, "owner": 3}
 
 
@@ -1694,7 +1715,7 @@ def upload():
 
 
 @app.get("/download/<int:file_id>")
-@login_required
+@login_or_public_share_required
 def download(file_id):
     share_context = request_share_context()
     try:
@@ -1713,7 +1734,7 @@ def download(file_id):
 
 
 @app.get("/download/folder/<int:folder_id>")
-@login_required
+@login_or_public_share_required
 def download_folder(folder_id):
     share_context = request_share_context()
     try:
@@ -1770,7 +1791,7 @@ def download_folder(folder_id):
 
 
 @app.get("/download/event/<int:event_id>")
-@login_required
+@login_or_public_share_required
 def download_event(event_id):
     share_context = request_share_context()
     event = accessible_event(event_id, share_context=share_context)

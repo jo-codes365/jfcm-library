@@ -1042,6 +1042,10 @@ document.addEventListener("DOMContentLoaded", function () {
   function closeItemActions() {
     if (itemActionsModal) itemActionsModal.hidden = true;
     if (itemProperties) itemProperties.hidden = true;
+    if (activeItemRow) {
+      var activeButton = activeItemRow.querySelector(".more-actions-button");
+      if (activeButton) activeButton.setAttribute("aria-expanded", "false");
+    }
   }
   function getSelectionForRow(row) {
     if (!row) return null;
@@ -1183,13 +1187,20 @@ document.addEventListener("DOMContentLoaded", function () {
       openItem.hidden = !row.dataset.openUrl;
     }
     if (downloadItem) downloadItem.href = row.dataset.downloadUrl;
-    if (copyItemLink) copyItemLink.hidden = !row.dataset.shareUrl;
+    if (copyItemLink) {
+      var isPublicRow = row.closest(".file-table")?.dataset.publicWorkspace === "true";
+      var copyUrl = row.dataset.shareUrl || (isPublicRow && row.dataset.openUrl ? new URL(row.dataset.openUrl, window.location.href).href : "");
+      copyItemLink.dataset.copyUrl = copyUrl;
+      copyItemLink.hidden = !copyUrl;
+    }
     if (starItemButton) {
       var starToggle = row.querySelector(".toggle-star");
       var isStarred = starToggle && starToggle.dataset.starred === "false";
       starItemButton.innerHTML = isStarred ? '<i class="bi bi-star-fill"></i> Unstar' : '<i class="bi bi-star"></i> Star';
     }
     itemActionsModal.hidden = false;
+    var actionButton = row.querySelector(".more-actions-button");
+    if (actionButton) actionButton.setAttribute("aria-expanded", "true");
     positionItemActions();
   }
   function submitStarUpdate(selection, starToggle) {
@@ -1246,16 +1257,16 @@ document.addEventListener("DOMContentLoaded", function () {
       showToast("The star update could not be completed.", "error");
     });
   }
-  document.querySelectorAll(".more-actions-button").forEach(function (button) {
-    button.addEventListener("click", function (event) {
-      event.stopPropagation();
-      var row = button.closest("tr");
-      if (itemActionsModal && !itemActionsModal.hidden && activeItemRow === row) {
-        closeItemActions();
-        return;
-      }
-      openItemActions(row);
-    });
+  document.addEventListener("click", function (event) {
+    var button = event.target.closest(".file-table .more-actions-button");
+    if (!button) return;
+    event.stopPropagation();
+    var row = button.closest("tr");
+    if (itemActionsModal && !itemActionsModal.hidden && activeItemRow === row) {
+      closeItemActions();
+      return;
+    }
+    openItemActions(row);
   });
   document.getElementById("close-item-actions")?.addEventListener("click", closeItemActions);
   if (itemActionsModal) itemActionsModal.addEventListener("click", function (event) {
@@ -1271,7 +1282,7 @@ document.addEventListener("DOMContentLoaded", function () {
   if (copyItemLink) copyItemLink.addEventListener("click", function () {
     var row = activeItemRow;
     if (!row) return;
-    navigator.clipboard.writeText(row.dataset.shareUrl).then(function () {
+    navigator.clipboard.writeText(copyItemLink.dataset.copyUrl || row.dataset.shareUrl).then(function () {
       showToast("Link copied.", "success");
     }).catch(function () {
       showToast("Copy failed. Please try again.", "error");
