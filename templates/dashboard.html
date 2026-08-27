@@ -5,7 +5,7 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.3.0/font/bootstrap-icons.css">
 
 <div class="storage-shell">
-  <aside class="sidebar"> 
+  <aside id="sidebar" class="sidebar" aria-label="Main navigation">
     <a class="brand sidebar-brand" href="{{ url_for('index') }}">
       <img src="{{ url_for('static', filename='images/JF.png') }}" alt="JFCM Pila" class="brand-logo">
       JFCM Pantry
@@ -67,10 +67,14 @@
     </div>
     {% endif %}
   </aside>
+  <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Close navigation" tabindex="-1" hidden></button>
   <main class="workspace">
     <header class="workspace-header">
+      <button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="Open navigation" aria-controls="sidebar" aria-expanded="false">
+        <i class="bi bi-list" aria-hidden="true"></i>
+      </button>
       <label class="global-search" for="file-search">
-        <span class="search-label"><i class="bi bi-search"></i></span>
+        <span class="search-label"><img src="{{ url_for('static', filename='images/JF.ico') }}" alt="" aria-hidden="true"></span>
         <input id="file-search" type="search" value="{{ search_query }}" placeholder="Search files and folders..." aria-label="Search all files and folders" autocomplete="off">
         <button id="global-search-clear" class="global-search-clear" type="button" aria-label="Clear search" title="Clear search" hidden><i class="bi bi-x-lg" aria-hidden="true"></i></button>
       </label>

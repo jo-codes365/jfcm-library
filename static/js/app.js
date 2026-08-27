@@ -1,4 +1,34 @@
 document.addEventListener("DOMContentLoaded", function () {
+  var sidebar = document.getElementById("sidebar");
+  var sidebarToggle = document.getElementById("sidebar-toggle");
+  var sidebarBackdrop = document.getElementById("sidebar-backdrop");
+  var mobileSidebarQuery = window.matchMedia("(max-width: 430px)");
+
+  function setSidebarOpen(isOpen) {
+    if (!sidebar || !sidebarToggle || !sidebarBackdrop) return;
+    var shouldOpen = mobileSidebarQuery.matches && isOpen;
+    sidebar.classList.toggle("is-open", shouldOpen);
+    sidebarToggle.setAttribute("aria-expanded", String(shouldOpen));
+    sidebarToggle.setAttribute("aria-label", shouldOpen ? "Close navigation" : "Open navigation");
+    sidebarToggle.querySelector("i").className = shouldOpen ? "bi bi-x-lg" : "bi bi-list";
+    sidebarBackdrop.hidden = !shouldOpen;
+    document.body.classList.toggle("sidebar-open", shouldOpen);
+  }
+
+  if (sidebar && sidebarToggle && sidebarBackdrop) {
+    sidebarToggle.addEventListener("click", function () {
+      setSidebarOpen(sidebarToggle.getAttribute("aria-expanded") !== "true");
+    });
+    sidebarBackdrop.addEventListener("click", function () { setSidebarOpen(false); });
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape" && sidebarToggle.getAttribute("aria-expanded") === "true") {
+        setSidebarOpen(false);
+        sidebarToggle.focus();
+      }
+    });
+    mobileSidebarQuery.addEventListener("change", function () { setSidebarOpen(false); });
+  }
+
   document.querySelectorAll("[data-password-toggle]").forEach(function (toggle) {
     var target = document.getElementById(toggle.dataset.passwordToggle);
     var icon = toggle.querySelector("i");
