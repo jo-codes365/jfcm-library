@@ -3138,18 +3138,13 @@ hr {
         display: none;
     }
 
-    .workspace-title {
+    .workspace-title h1 {
         display: none;
     }
 
     .workspace-title.bulk-selection-active {
-        display: block;
         min-height: 52px;
         margin-bottom: 10px;
-    }
-
-    .workspace-title.bulk-selection-active > div {
-        display: none;
     }
 
     .workspace-title .bulk-toolbar {
@@ -3198,6 +3193,7 @@ hr {
     }
 
     .file-table tbody td {
+        display: none;
         width: auto !important;
         padding: 0;
         border: 0;
@@ -3207,14 +3203,8 @@ hr {
         display: none;
     }
 
-    .file-table .column-location,
-    .file-table .column-type,
-    .file-table .column-size,
-    .file-table .selection-cell {
-        display: none;
-    }
-
     .file-table .file-name {
+        display: flex;
         grid-column: 1 / -1;
         justify-content: flex-start;
         min-width: 0;
@@ -3222,6 +3212,7 @@ hr {
     }
 
     .file-table .column-modified {
+        display: flex;
         grid-column: 1;
         justify-content: flex-start;
         color: var(--muted);
@@ -3229,7 +3220,12 @@ hr {
         text-align: left;
     }
 
+    .file-table .column-modified .trash-retention-note {
+        display: none;
+    }
+
     .file-table .actions {
+        display: flex;
         grid-column: 2;
         justify-content: flex-end;
     }
@@ -3317,10 +3313,10 @@ hr {
     height: 40px;
     padding: 0;
     place-items: center;
-    /* border: 1px solid var(--line); */
+    border: none;
     border-radius: 50%;
     color: var(--ink);
-    background: #fff;
+    background: #f6fcfe;
     /* box-shadow: 0 3px 10px rgba(15, 23, 42, 0.14); */
     cursor: pointer;
   }
