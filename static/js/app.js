@@ -101,9 +101,42 @@ document.addEventListener("DOMContentLoaded", function () {
   try {
     window.localStorage.setItem("jfcmOfflineScopeSegment", offlineScopeSegment);
   } catch (_error) {}
+
+  function sendOfflineScope(worker) {
+    if (!worker) return Promise.resolve();
+    if (!("MessageChannel" in window)) {
+      worker.postMessage({ type: "SET_OFFLINE_SCOPE", scope: offlineScopeSegment });
+      return Promise.resolve();
+    }
+    return new Promise(function (resolve) {
+      var channel = new MessageChannel();
+      var finished = false;
+      var timeout = window.setTimeout(function () {
+        if (!finished) resolve();
+      }, 2000);
+      channel.port1.onmessage = function () {
+        finished = true;
+        window.clearTimeout(timeout);
+        resolve();
+      };
+      try {
+        worker.postMessage({ type: "SET_OFFLINE_SCOPE", scope: offlineScopeSegment }, [channel.port2]);
+      } catch (_error) {
+        window.clearTimeout(timeout);
+        resolve();
+      }
+    });
+  }
+
   var offlineServiceWorkerReady = null;
+  var offlineServiceWorkerError = null;
   if ("serviceWorker" in navigator && "caches" in window) {
-    offlineServiceWorkerReady = navigator.serviceWorker.register("/service-worker.js", { scope: "/" }).then(function () {
+    offlineServiceWorkerReady = navigator.serviceWorker.register("/service-worker.js", {
+      scope: "/",
+      updateViaCache: "none"
+    }).then(function (registration) {
+      var expectedScope = new URL("/", window.location.origin).href;
+      if (registration.scope !== expectedScope) throw new Error("The offline worker does not control the whole application");
       return navigator.serviceWorker.ready;
     }).then(async function (registration) {
       var cacheNames = await caches.keys();
@@ -112,8 +145,11 @@ document.addEventListener("DOMContentLoaded", function () {
         return name.indexOf("jfcm-offline-item-v2-private-") === 0 && (!currentPrivatePrefix || name.indexOf(currentPrivatePrefix) !== 0);
       }).map(function (name) { return caches.delete(name); }));
       var worker = navigator.serviceWorker.controller || registration.active || registration.waiting;
-      if (worker) worker.postMessage({ type: "SET_OFFLINE_SCOPE", scope: offlineScopeSegment });
+      await sendOfflineScope(worker);
       return registration;
+    }).catch(function (error) {
+      offlineServiceWorkerError = error;
+      return null;
     });
   }
 
@@ -148,7 +184,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
   async function cacheItemOffline(manifestUrl) {
     if (!offlineServiceWorkerReady) throw new Error("Offline access is unavailable in this browser");
-    await offlineServiceWorkerReady;
+    var registration = await offlineServiceWorkerReady;
+    if (!registration) throw offlineServiceWorkerError || new Error("Offline storage is blocked by the browser's privacy settings");
     if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function () {});
     var absoluteManifestUrl = new URL(manifestUrl, window.location.href).href;
     var manifestResponse = await fetch(absoluteManifestUrl, { credentials: "same-origin", cache: "no-store" });
