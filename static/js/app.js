@@ -143,6 +143,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   var logoutLink = document.getElementById("logout-link");
   var logoutModal = document.getElementById("logout-modal");
+  if (logoutModal) logoutModal.style.zIndex = "35";
   var cancelLogout = document.getElementById("cancel-logout");
   if (logoutLink && logoutModal) {
     logoutLink.addEventListener("click", function (event) {
