@@ -1928,7 +1928,9 @@ document.addEventListener("DOMContentLoaded", function () {
     if (!fileWorkspace || !mobileSelectButton) return;
     fileWorkspace.classList.toggle("mobile-select-mode", enabled);
     mobileSelectButton.setAttribute("aria-pressed", String(enabled));
-    mobileSelectButton.textContent = enabled ? "Done" : "Select";
+    mobileSelectButton.innerHTML = enabled
+      ? "Done"
+      : '<i class="bi bi-check2-square" aria-hidden="true"></i> Select';
     if (!enabled) {
       itemSelections.forEach(function (input) { input.checked = false; });
       updateBulkToolbar();
