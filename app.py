@@ -1594,6 +1594,7 @@ def events_calendar():
 def upload():
     share_context = request_share_context()
     raw_folder_id = request.form.get("folder_id")
+    raw_event_id = request.form.get("event_id")
     if share_context:
         if raw_folder_id in (None, "", "root"):
             folder_id = None
@@ -1605,9 +1606,38 @@ def upload():
         if raw_folder_id not in (None, "", "root") and not target_folder:
             abort(404)
         upload_owner_id = share_context["owner_id"]
+        if share_context["kind"] == "event":
+            target_event = accessible_event(share_context["item_id"], required="editor", share_context=share_context)
+            if not target_event:
+                abort(404)
+            event_id = target_event["id"]
+            if raw_event_id not in (None, "") and (not str(raw_event_id).isdigit() or int(raw_event_id) != event_id):
+                abort(400)
+            if target_folder and target_folder.get("event_id") != event_id:
+                abort(400)
+        else:
+            event_id = target_folder.get("event_id") if target_folder else None
+            if raw_event_id not in (None, "") and (not str(raw_event_id).isdigit() or int(raw_event_id) != event_id):
+                abort(400)
     else:
         folder_id = valid_destination(raw_folder_id)
         upload_owner_id = session["user_id"]
+        target_folder = owned_folder(folder_id) if folder_id else None
+        event_id = valid_event(raw_event_id)
+        if target_folder:
+            folder_event_id = target_folder.get("event_id")
+            if event_id is not None and folder_event_id != event_id:
+                abort(400)
+            event_id = folder_event_id
+
+    if share_context and share_context["kind"] == "event":
+        upload_return_url = url_for("shared_event", share_token=share_context["token"], folder=folder_id) if folder_id else url_for("shared_event", share_token=share_context["token"])
+    elif share_context and share_context["kind"] == "folder":
+        upload_return_url = url_for("shared_folder", share_token=share_context["token"], folder=folder_id) if folder_id else url_for("shared_folder", share_token=share_context["token"])
+    elif event_id is not None:
+        upload_return_url = url_for("dashboard", section="events", event=event_id, folder=folder_id) if folder_id else url_for("dashboard", section="events", event=event_id)
+    else:
+        upload_return_url = url_for("dashboard", folder=folder_id) if folder_id else url_for("dashboard")
     incoming_files = request.files.getlist("file")
     folder_paths = request.form.getlist("folder_path")
     valid_files = [item for item in incoming_files if item and item.filename]
@@ -1615,7 +1645,7 @@ def upload():
         flash("Select a file to upload.", "error")
         if request.headers.get("X-Requested-With") == "XMLHttpRequest":
             return jsonify({"ok": False, "results": [{"name": "", "status": "error", "message": "Select a file to upload."}]})
-        return redirect_to_workspace(url_for("dashboard", folder=folder_id) if folder_id else url_for("dashboard"))
+        return redirect_to_workspace(upload_return_url)
 
     user_folder = user_directory(upload_owner_id)
     user_folder.mkdir(parents=True, exist_ok=True)
@@ -1643,8 +1673,8 @@ def upload():
                 cursor = get_db().cursor()
                 try:
                     cursor.execute(
-                        "INSERT INTO folders (user_id, parent_id, name) VALUES (%s, %s, %s)",
-                        (upload_owner_id, parent_id, safe_part),
+                        "INSERT INTO folders (user_id, parent_id, event_id, name) VALUES (%s, %s, %s, %s)",
+                        (upload_owner_id, parent_id, event_id, safe_part),
                     )
                     folder_cache[cache_key] = cursor.lastrowid
                     get_db().commit()
@@ -1697,8 +1727,8 @@ def upload():
         try:
             cursor = get_db().cursor()
             cursor.execute(
-                "INSERT INTO files (user_id, original_filename, stored_filename, file_size, mime_type, share_token, folder_id) VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                (upload_owner_id, original_name, stored_name, file_size, incoming.mimetype or "application/octet-stream", share_token, target_folder_id),
+                "INSERT INTO files (user_id, original_filename, stored_filename, file_size, mime_type, share_token, folder_id, event_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                (upload_owner_id, original_name, stored_name, file_size, incoming.mimetype or "application/octet-stream", share_token, target_folder_id, event_id),
             )
             get_db().commit()
             uploaded += 1
@@ -1722,7 +1752,7 @@ def upload():
 
     if request.headers.get("X-Requested-With") == "XMLHttpRequest":
         return jsonify({"ok": uploaded > 0, "uploaded": uploaded, "results": results})
-    return redirect_to_workspace(url_for("dashboard", folder=folder_id) if folder_id else url_for("dashboard"))
+    return redirect_to_workspace(upload_return_url)
 
 
 @app.get("/download/<int:file_id>")
@@ -2124,12 +2154,22 @@ def delete(file_id):
 def create_folder():
     name = secure_filename(request.form.get("name", "")).strip("._")
     parent_id = valid_destination(request.form.get("parent_id"))
+    parent_folder = owned_folder(parent_id) if parent_id else None
+    event_id = valid_event(request.form.get("event_id"))
+    if parent_folder:
+        parent_event_id = parent_folder.get("event_id")
+        if event_id is not None and parent_event_id != event_id:
+            abort(400)
+        event_id = parent_event_id
     if not name:
         flash("Enter a valid folder name.", "error")
     else:
         cursor = get_db().cursor()
         try:
-            cursor.execute("INSERT INTO folders (user_id, parent_id, name) VALUES (%s, %s, %s)", (session["user_id"], parent_id, name))
+            cursor.execute(
+                "INSERT INTO folders (user_id, parent_id, event_id, name) VALUES (%s, %s, %s, %s)",
+                (session["user_id"], parent_id, event_id, name),
+            )
             get_db().commit()
             flash("Folder created.", "success")
         except MySQLError:
@@ -2137,7 +2177,11 @@ def create_folder():
             flash("The folder could not be created.", "error")
         finally:
             cursor.close()
-    return redirect_to_workspace(url_for("dashboard", folder=parent_id) if parent_id else url_for("dashboard"))
+    if event_id is not None:
+        default_url = url_for("dashboard", section="events", event=event_id, folder=parent_id) if parent_id else url_for("dashboard", section="events", event=event_id)
+    else:
+        default_url = url_for("dashboard", folder=parent_id) if parent_id else url_for("dashboard")
+    return redirect_to_workspace(default_url)
 
 
 @app.post("/events")

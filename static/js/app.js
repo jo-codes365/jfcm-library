@@ -500,6 +500,11 @@ document.addEventListener("DOMContentLoaded", function () {
       if (folderInput) {
         payload.append("folder_id", folderInput.value);
       }
+      ["event_id", "share_context_kind", "share_context_token"].forEach(function (name) {
+        var input = uploadForm.querySelector('input[name="' + name + '"]');
+        if (input && input.value) payload.append(name, input.value);
+      });
+      payload.append("return_to", currentWorkspaceUrl().toString());
 
       fetch(uploadForm.action, {
         method: "POST",

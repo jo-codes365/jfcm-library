@@ -215,6 +215,7 @@
         {% if not is_public_workspace and not is_shared_listing %}<form id="upload-form" method="post" action="{{ url_for('upload') }}" enctype="multipart/form-data" data-max-size-mb="{{ max_file_size_mb }}" hidden>
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="folder_id" value="{{ folder_id or '' }}">
+          <input type="hidden" name="event_id" value="{{ event_id or '' }}">
           {% if share_context %}
           <input type="hidden" name="share_context_kind" value="{{ share_context.kind }}">
           <input type="hidden" name="share_context_token" value="{{ share_context.token }}">
@@ -228,6 +229,7 @@
             <form method="post" action="{{ url_for('create_folder') }}">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <input type="hidden" name="parent_id" value="{{ folder_id or '' }}">
+              <input type="hidden" name="event_id" value="{{ event_id or '' }}">
               <div class="inline-form">
                 <input id="folder-name" name="name" maxlength="60" placeholder="Folder name" required>
               </div>
