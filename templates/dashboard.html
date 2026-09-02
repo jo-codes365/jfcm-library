@@ -105,7 +105,6 @@
             <strong id="selected-count">0 items selected</strong>
             {% if not is_trash %}
             <button class="row-action download-action" type="button" data-action="/items/download" aria-label="Download selected items" title="Download selected items"><i class="bi bi-download" aria-hidden="true"></i></button>
-            <button id="bulk-offline-action" class="row-action" type="button" aria-label="Make selected items accessible offline" title="Make selected items accessible offline" data-offline-icon-only="true"><i class="bi bi-cloud-arrow-down" aria-hidden="true"></i></button>
             <button id="bulk-star-action" class="row-action star-action" type="button" data-action="/items/star" data-starred="true" aria-label="Star selected items" title="Star selected items"><i class="bi bi-star" aria-hidden="true"></i></button>
             {% if not is_shared_workspace or workspace_can_edit %}
             <button id="bulk-actions-button" class="row-action more-actions-button" type="button" aria-label="Selected item actions" title="Selected item actions" aria-expanded="false"><i class="bi bi-three-dots-vertical" aria-hidden="true"></i></button>
@@ -541,6 +540,7 @@
     <div class="item-actions-list">
       {% if not is_trash %}
       <button class="norms" type="button" data-action="/items/download"><i class="bi bi-download"></i> Download</button>
+      <button id="bulk-offline-action" class="norms" type="button" aria-label="Make selected items accessible offline" title="Make selected items accessible offline"><i class="bi bi-cloud-arrow-down" aria-hidden="true"></i> <span>Save Offline</span></button>
       <hr style="width: 100%; margin: 3px 0; background-color: #cbd2dc; size: 0.5px;">
       <button class="norms" type="button" data-action="/items/star" data-starred="true"><i class="bi bi-star"></i> Star</button>
       <button class="norms" type="button" data-action="/items/move"><i class="bi bi-folder-symlink"></i> Move</button>
