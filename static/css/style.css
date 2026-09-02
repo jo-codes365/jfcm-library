@@ -2937,8 +2937,14 @@ button {
   color: #6b7280;
 }
 .toggle-star > i {
+  display: inline-grid;
   font-size: 18px;
   line-height: 1;
+  place-items: center;
+}
+.star-action > .bi-star::before,
+.star-action > .bi-star-fill::before {
+  vertical-align: 0;
 }
 .bi-star::before,
 .bi-star-fill::before {
