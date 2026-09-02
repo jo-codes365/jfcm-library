@@ -206,7 +206,7 @@
             {% if is_event_date_workspace %}
             <button id="date-workspace-add-event" class="button primary" type="button"><i class="bi bi-calendar-plus"></i> Add Event</button>
             {% elif section == 'events' and not current_event %}
-            <button id="events-home-add-event" class="button primary" type="button"><i class="bi bi-calendar-plus"></i> Add New Event</button>
+            <button id="events-home-add-event" class="button primary" type="button"><i class="bi bi-calendar-plus"></i> New Event</button>
             {% elif not is_public_workspace and not is_shared_listing and not is_trash and (not is_shared_workspace or workspace_can_edit) %}
             <button id="upload-button" class="button primary" type="button"><i class="bi bi-upload"></i> Upload files</button>
             {% endif %}

@@ -3170,6 +3170,17 @@ hr {
 
 /* Responsive font sizes for smaller screens */
 @media (max-width: 480px) {
+    .event-icon-options {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 4px;
+    }
+
+    .event-icon-card {
+        min-width: 0;
+        min-height: 56px;
+        padding: 6px 2px;
+    }
+
     .bi-star::before,
     .bi-star-fill::before {
         width: 14px;
