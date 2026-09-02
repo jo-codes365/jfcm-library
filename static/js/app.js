@@ -170,15 +170,41 @@ document.addEventListener("DOMContentLoaded", function () {
     var iconClass = isOffline ? "bi bi-cloud-slash" : "bi bi-cloud-arrow-down";
     var icon = button.querySelector("i");
     var textLabel = button.querySelector("span");
-    if (icon) icon.className = iconClass;
+    if (icon) {
+      icon.className = iconClass;
+      icon.removeAttribute("role");
+      icon.setAttribute("aria-hidden", "true");
+    }
     if (textLabel) textLabel.textContent = label;
     button.dataset.offlineCached = String(isOffline);
     button.setAttribute("aria-label", label);
     button.setAttribute("title", label);
   }
 
+  function setOfflineActionLoading(button, isLoading, wasOffline) {
+    if (!button) return;
+    var icon = button.querySelector("i");
+    var textLabel = button.querySelector("span");
+    if (!isLoading) {
+      button.disabled = false;
+      delete button.dataset.offlineLoading;
+      return;
+    }
+    var label = wasOffline ? "Removing Offline..." : "Saving Offline...";
+    button.disabled = true;
+    button.dataset.offlineLoading = "true";
+    if (icon) {
+      icon.className = "spinner-border spinner-border-sm";
+      icon.setAttribute("role", "status");
+      icon.setAttribute("aria-hidden", "true");
+    }
+    if (textLabel) textLabel.textContent = label;
+    button.setAttribute("aria-label", label);
+    button.setAttribute("title", label);
+  }
+
   async function syncOfflineAction(button) {
-    if (!button || !button.dataset.offlineUrl) return;
+    if (!button || !button.dataset.offlineUrl || button.dataset.offlineLoading === "true") return;
     renderOfflineAction(button, await isAccessibleOffline(button.dataset.offlineUrl));
   }
 
@@ -228,9 +254,10 @@ document.addEventListener("DOMContentLoaded", function () {
     if (!button || !button.dataset.offlineUrl) return;
     event.preventDefault();
     event.stopPropagation();
-    button.disabled = true;
+    var wasOffline = button.dataset.offlineCached === "true";
+    setOfflineActionLoading(button, true, wasOffline);
     try {
-      var wasOffline = await isAccessibleOffline(button.dataset.offlineUrl);
+      wasOffline = await isAccessibleOffline(button.dataset.offlineUrl);
       if (wasOffline) {
         await removeItemOffline(button.dataset.offlineUrl);
         showToast("Offline access removed.", "success");
@@ -238,12 +265,13 @@ document.addEventListener("DOMContentLoaded", function () {
         var manifest = await cacheItemOffline(button.dataset.offlineUrl);
         showToast((manifest.file_count || 0) + " file" + (manifest.file_count === 1 ? "" : "s") + " available offline.", "success");
       }
+      setOfflineActionLoading(button, false, wasOffline);
       await refreshOfflineActions(button.dataset.offlineUrl);
       if (typeof syncBulkOfflineAction === "function") syncBulkOfflineAction();
     } catch (error) {
+      setOfflineActionLoading(button, false, wasOffline);
+      renderOfflineAction(button, wasOffline);
       showToast(error.message || "Offline access could not be updated.", "error");
-    } finally {
-      button.disabled = false;
     }
   });
 
@@ -1740,7 +1768,7 @@ document.addEventListener("DOMContentLoaded", function () {
     }).filter(Boolean)));
   }
   async function syncBulkOfflineAction() {
-    if (!bulkOfflineAction) return;
+    if (!bulkOfflineAction || bulkOfflineAction.dataset.offlineLoading === "true") return;
     var syncId = ++bulkOfflineSyncId;
     var urls = selectedOfflineUrls();
     if (!urls.length) {
@@ -1812,10 +1840,11 @@ document.addEventListener("DOMContentLoaded", function () {
     event.stopPropagation();
     var urls = selectedOfflineUrls();
     if (!urls.length) return;
-    bulkOfflineAction.disabled = true;
+    var removeAll = bulkOfflineAction.dataset.offlineCached === "true";
+    setOfflineActionLoading(bulkOfflineAction, true, removeAll);
     try {
       var states = await Promise.all(urls.map(isAccessibleOffline));
-      var removeAll = states.every(Boolean);
+      removeAll = states.every(Boolean);
       for (var index = 0; index < urls.length; index += 1) {
         if (removeAll) {
           await removeItemOffline(urls[index]);
@@ -1823,12 +1852,13 @@ document.addEventListener("DOMContentLoaded", function () {
           await cacheItemOffline(urls[index]);
         }
       }
-      showToast(removeAll ? "Offline access removed from selected items." : "Selected items are available offline.", "success");
+      setOfflineActionLoading(bulkOfflineAction, false, removeAll);
       await syncBulkOfflineAction();
+      showToast(removeAll ? "Offline access removed from selected items." : "Selected items are available offline.", "success");
     } catch (error) {
+      setOfflineActionLoading(bulkOfflineAction, false, removeAll);
+      await syncBulkOfflineAction();
       showToast(error.message || "Offline access could not be updated.", "error");
-    } finally {
-      bulkOfflineAction.disabled = false;
     }
   });
   if (moveItemButton) moveItemButton.addEventListener("click", function () {
