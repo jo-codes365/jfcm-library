@@ -1426,8 +1426,8 @@ document.addEventListener("DOMContentLoaded", function () {
       starToggle.classList.toggle("is-starred", isStarred);
       starToggle.setAttribute("aria-label", isStarred ? "Remove from Starred" : "Add to Starred");
       starToggle.setAttribute("title", isStarred ? "Unstar" : "Star");
-      var path = starToggle.querySelector("path");
-      if (path) path.setAttribute("fill", isStarred ? "currentColor" : "none");
+      var starIcon = starToggle.querySelector("i");
+      if (starIcon) starIcon.className = isStarred ? "bi bi-star-fill" : "bi bi-star";
       if (activeItemRow === starToggle.closest("tr") && starItemButton) {
         starItemButton.innerHTML = isStarred ? '<i class="bi bi-star-fill"></i> Unstar' : '<i class="bi bi-star"></i> Star';
       }

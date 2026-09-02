@@ -1,11 +1,17 @@
 "use strict";
 
-const CORE_CACHE = "jfcm-offline-core-v5";
-const SCOPE_CACHE = "jfcm-offline-scope-v2";
+// Increment this version whenever the offline page, worker logic, or any
+// resource in CORE_URLS changes. Activation removes every older code cache.
+const OFFLINE_CACHE_VERSION = "v8";
+const CORE_CACHE_PREFIX = "jfcm-offline-core-";
+const CORE_CACHE = CORE_CACHE_PREFIX + OFFLINE_CACHE_VERSION;
+const SCOPE_CACHE_PREFIX = "jfcm-offline-scope-";
+const SCOPE_CACHE = SCOPE_CACHE_PREFIX + "v2";
 const ITEM_CACHE_PREFIX = "jfcm-offline-item-v2-";
 const PUBLIC_ITEM_PREFIX = ITEM_CACHE_PREFIX + "public-";
 const OFFLINE_FALLBACK_URL = "/static/offline.html";
 const SCOPE_STATE_URL = "/__jfcm_offline_scope__";
+const BOOTSTRAP_ICONS_URL = "https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css";
 const CORE_URLS = [
   OFFLINE_FALLBACK_URL,
   "/static/css/style.css",
@@ -13,15 +19,32 @@ const CORE_URLS = [
   "/static/images/JF.ico",
   "/static/images/JF.png",
   "/static/css/fonts/Satoshi-Regular.otf",
-  "/static/css/fonts/Satoshi-Bold.otf"
+  "/static/css/fonts/Satoshi-Bold.otf",
+  BOOTSTRAP_ICONS_URL
 ];
 
 let activeScope = "public";
 
 self.addEventListener("install", function (event) {
   event.waitUntil(
-    caches.open(CORE_CACHE).then(function (cache) {
-      return cache.addAll(CORE_URLS);
+    caches.open(CORE_CACHE).then(async function (cache) {
+      // Bypass the HTTP cache so a deployment cannot seed the new Cache
+      // Storage version with stale copies of changed assets.
+      await cache.addAll(CORE_URLS.map(function (url) {
+        return new Request(url, { cache: "reload" });
+      }));
+
+      // Cache the icon font referenced by the Bootstrap Icons stylesheet so
+      // its class-based icons continue to render on the offline page.
+      const stylesheet = await cache.match(BOOTSTRAP_ICONS_URL);
+      const css = stylesheet ? await stylesheet.clone().text() : "";
+      const fontUrls = Array.from(css.matchAll(/url\(([^)]+)\)/g), function (match) {
+        const value = match[1].trim().replace(/^["']|["']$/g, "");
+        return value && !value.startsWith("data:") ? new URL(value, BOOTSTRAP_ICONS_URL).href : "";
+      }).filter(Boolean);
+      await cache.addAll(Array.from(new Set(fontUrls)).map(function (url) {
+        return new Request(url, { cache: "reload" });
+      }));
     }).then(function () { return self.skipWaiting(); })
   );
 });
@@ -65,8 +88,13 @@ self.addEventListener("activate", function (event) {
   event.waitUntil((async function () {
     const names = await caches.keys();
     await Promise.all(names.filter(function (name) {
-      return ["jfcm-offline-core-v1", "jfcm-offline-core-v2", "jfcm-offline-core-v3", "jfcm-offline-core-v4"].includes(name) || name.startsWith("jfcm-offline-item-v1-");
+      const isOldCoreCache = name.startsWith(CORE_CACHE_PREFIX) && name !== CORE_CACHE;
+      const isOldScopeCache = name.startsWith(SCOPE_CACHE_PREFIX) && name !== SCOPE_CACHE;
+      return isOldCoreCache || isOldScopeCache;
     }).map(function (name) { return caches.delete(name); }));
+
+    // Per-item caches contain files explicitly saved by the user. They use a
+    // separate namespace and are intentionally excluded from version cleanup.
     activeScope = await readScope();
     await self.clients.claim();
   })());

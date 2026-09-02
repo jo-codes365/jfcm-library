@@ -7,6 +7,7 @@
   <title>Saved Offline | JFCM Pantry</title>
   <link rel="stylesheet" href="/static/css/style.css">
   <link rel="icon" type="image/x-icon" href="/static/images/JF.ico">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
   <style>
     .offline-workspace .workspace-title-content { min-width: 0; }
     .offline-workspace .workspace-title-actions { flex-direction: row; }
@@ -16,7 +17,7 @@
     .offline-workspace .file-table th:nth-child(3), .offline-workspace .file-table td:nth-child(3) { width: 24%; }
     .offline-workspace .file-table th:nth-child(4), .offline-workspace .file-table td:nth-child(4) { width: 14%; text-align: right; }
     .offline-icon { display: inline-flex; align-items: center; justify-content: center; width: 1.2em; height: 1.2em; flex: 0 0 auto; }
-    .offline-icon svg { width: 100%; height: 100%; }
+    .offline-icon i { line-height: 1; }
     .offline-workspace .row-action .offline-icon { width: 1.1rem; height: 1.1rem; }
     .offline-workspace .norms .offline-icon { flex: 0 0 1.1rem; width: 1.1rem; height: 1.1rem; }
     .offline-sidebar-note { margin: auto 12px 0; color: var(--muted); font-size: .78rem; line-height: 1.45; }
@@ -50,15 +51,15 @@
       <header class="workspace-header">
         <button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="Open navigation" aria-controls="sidebar" aria-expanded="false">
           <span class="offline-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+            <i class="bi bi-list"></i>
           </span>
         </button>
         <label class="global-search" for="file-search">
           <span class="search-label" aria-hidden="true">
-            <span class="offline-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg></span>
+            <span class="offline-icon"><i class="bi bi-search"></i></span>
           </span>
           <input id="file-search" type="search" placeholder="Search saved files..." aria-label="Search saved offline files" autocomplete="off">
-          <button id="global-search-clear" class="global-search-clear" type="button" aria-label="Clear search" title="Clear search" hidden>&times;</button>
+          <button id="global-search-clear" class="global-search-clear" type="button" aria-label="Clear search" title="Clear search" hidden><i class="bi bi-x-lg" aria-hidden="true"></i></button>
         </label>
       </header>
 
@@ -97,7 +98,7 @@
             <header>
               <h2 id="properties-panel-title">Properties</h2>
               <button id="close-properties-panel" class="row-action" type="button" aria-label="Close properties" title="Close">
-                <span class="offline-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 6 12 12M18 6 6 18"/></svg></span>
+                <span class="offline-icon" aria-hidden="true"><i class="bi bi-x-lg"></i></span>
               </button>
             </header>
             <dl id="properties-panel-list" class="item-properties"></dl>
@@ -111,10 +112,10 @@
     <section class="modal-card item-actions-card">
       <div class="item-actions-header"><h2 id="item-actions-title" hidden>Item actions</h2></div>
       <div class="item-actions-list">
-        <a id="open-item" class="norms" href=""><span class="offline-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 5h5v5M19 5l-9 9"/><path d="M19 14v4a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h4"/></svg></span>Open</a>
-        <a id="download-item" class="norms" href=""><span class="offline-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m-4-4 4 4 4-4M5 20h14"/></svg></span>Download</a>
-        <button id="unsave-item" class="norms" type="button"><span class="offline-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 18a4 4 0 0 1-.6-7.96A6 6 0 0 1 17.74 8.5 4.5 4.5 0 0 1 18.5 17H15"/><path d="m9 12 6 6m0-6-6 6"/></svg></span>Unsave Offline</button>
-        <button id="properties-item" class="norms" type="button"><span class="offline-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/></svg></span>Properties</button>
+        <a id="open-item" class="norms" href=""><span class="offline-icon" aria-hidden="true"><i class="bi bi-arrow-up-right"></i></span>Open</a>
+        <a id="download-item" class="norms" href=""><span class="offline-icon" aria-hidden="true"><i class="bi bi-download"></i></span>Download</a>
+        <button id="unsave-item" class="norms" type="button"><span class="offline-icon" aria-hidden="true"><i class="bi bi-cloud-slash"></i></span>Unsave Offline</button>
+        <button id="properties-item" class="norms" type="button"><span class="offline-icon" aria-hidden="true"><i class="bi bi-info-circle"></i></span>Properties</button>
       </div>
     </section>
   </div>
@@ -353,7 +354,7 @@
         downloadLink.href = downloadUrl;
         downloadLink.setAttribute("aria-label", "Download " + name);
         downloadLink.title = "Download";
-        downloadLink.innerHTML = '<span class="offline-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m-4-4 4 4 4-4M5 20h14"/></svg></span>';
+        downloadLink.innerHTML = '<span class="offline-icon" aria-hidden="true"><i class="bi bi-download"></i></span>';
         var moreButton = document.createElement("button");
         moreButton.className = "row-action more-actions-button";
         moreButton.type = "button";
@@ -362,7 +363,7 @@
         moreButton.setAttribute("aria-haspopup", "menu");
         moreButton.setAttribute("aria-controls", "item-actions-modal");
         moreButton.setAttribute("aria-expanded", "false");
-        moreButton.innerHTML = '<span class="offline-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg></span>';
+        moreButton.innerHTML = '<span class="offline-icon" aria-hidden="true"><i class="bi bi-three-dots-vertical"></i></span>';
         actions.appendChild(downloadLink);
         actions.appendChild(moreButton);
         actionsCell.appendChild(actions);

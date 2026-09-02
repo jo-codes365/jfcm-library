@@ -2018,6 +2018,9 @@ table tbody tr:nth-child(even) {
   padding-top: 20 px;
   font-size: .85rem !important;
 }
+.events-calendar-event-link .event-icon-inline {
+  margin-right: 0;
+}
 .events-calendar-day a {
   padding-top: 8px;
   font-size: .96rem;
@@ -2927,12 +2930,9 @@ button {
   padding: 5px;
   color: #6b7280;
 }
-.star-action svg {
-  width: 18px;
-  height: 18px;
-}
-.star-action svg path {
-  stroke-width: 2.2;
+.toggle-star > i {
+  font-size: 18px;
+  line-height: 1;
 }
 .star-action:hover {
   color: #EFB358;
