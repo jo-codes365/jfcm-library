@@ -1621,7 +1621,7 @@ table tbody tr:nth-child(even) {
   padding: 6px;
   background: #fff;
   border: 1px solid var(--line);
-  border-radius: 12px 0 12px 12px;
+  border-radius: 0 12px 12px 12px;
   box-shadow: 0 8px 20px rgba(31, 41, 55, 0.1);
 }
 .filter-menu {
@@ -2929,8 +2929,8 @@ button {
 }
 .star-action {
   display: inline-grid;
-  width: 30px;
-  height: 30px;
+  /* width: 30px;
+  height: 30px; */
   place-items: center;
   padding: 5px;
   color: #6b7280;
