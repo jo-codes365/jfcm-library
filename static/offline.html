@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#ffffff">
+  <title>Saved Files Offline</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="icon" type="image/x-icon" href="/static/images/JF.ico">
+  <style>
+    .offline-workspace .workspace-title-content { min-width: 0; }
+    .offline-workspace .workspace-title-actions { flex-direction: row; }
+    .offline-workspace .file-name a { cursor: pointer; }
+    .offline-workspace .offline-status { color: var(--success); }
+    .offline-icon { display: inline-flex; align-items: center; justify-content: center; width: 1.2em; height: 1.2em; flex: 0 0 auto; }
+    .offline-icon svg { width: 100%; height: 100%; }
+    .offline-sidebar-note { margin: auto 12px 0; color: var(--muted); font-size: .78rem; line-height: 1.45; }
+    @media (max-width: 480px) {
+      .offline-workspace .workspace-title h1 { display: block; }
+      .offline-workspace .workspace-title { gap: 12px; }
+      .offline-workspace .workspace-title-actions .button { min-height: 36px; padding: 7px 14px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="storage-shell offline-workspace">
+    <aside id="sidebar" class="sidebar" aria-label="Main navigation">
+      <a class="brand sidebar-brand" href="/">
+        <img src="/static/images/JF.png" alt="JFCM Pila" class="brand-logo">
+        JFCM Pantry
+      </a>
+      <nav class="sidebar-nav">
+        <a class="sidebar-link active" href="/static/offline.html" aria-current="page">
+          <span class="offline-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 18a4 4 0 0 1-.6-7.96A6 6 0 0 1 17.74 8.5 4.5 4.5 0 0 1 18.5 17H15"/><path d="M12 12v8m-3-3 3 3 3-3"/></svg>
+          </span>
+          Saved offline
+        </a>
+      </nav>
+      <p class="offline-sidebar-note">Only items you saved for offline access are shown here.</p>
+    </aside>
+    <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Close navigation" tabindex="-1" hidden></button>
+
+    <main class="workspace">
+      <header class="workspace-header">
+        <button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="Open navigation" aria-controls="sidebar" aria-expanded="false">
+          <span class="offline-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+          </span>
+        </button>
+        <label class="global-search" for="file-search">
+          <span class="search-label" aria-hidden="true">
+            <span class="offline-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg></span>
+          </span>
+          <input id="file-search" type="search" placeholder="Search saved files..." aria-label="Search saved offline files" autocomplete="off">
+          <button id="global-search-clear" class="global-search-clear" type="button" aria-label="Clear search" title="Clear search" hidden>&times;</button>
+        </label>
+      </header>
+
+      <div class="workspace-body">
+        <div class="workspace-content">
+          <section class="workspace-title">
+            <div class="workspace-title-content">
+              <h1>Saved Files Offline</h1>
+              <p>Files and items available without an internet connection.</p>
+            </div>
+            <div class="workspace-title-actions">
+              <button id="retry-button" class="button primary" type="button">Try again</button>
+            </div>
+          </section>
+
+          <section id="file-results" class="file-workspace" aria-live="polite" aria-busy="true">
+            <div id="offline-table" class="table-wrap" hidden>
+              <table class="file-table" data-workspace="offline" data-public-workspace="true">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th class="column-type">Type</th>
+                    <th class="column-size">Files</th>
+                    <th class="column-modified">Availability</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="offline-items"></tbody>
+              </table>
+            </div>
+            <div class="empty-state" id="offline-empty">
+              <h3>No saved offline items</h3>
+              <p>No files or folders have been saved for offline access in this session.</p>
+            </div>
+          </section>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    (function () {
+      "use strict";
+      var sidebar = document.getElementById("sidebar");
+      var sidebarToggle = document.getElementById("sidebar-toggle");
+      var sidebarBackdrop = document.getElementById("sidebar-backdrop");
+      var searchInput = document.getElementById("file-search");
+      var searchClear = document.getElementById("global-search-clear");
+      var results = document.getElementById("file-results");
+      var table = document.getElementById("offline-table");
+      var list = document.getElementById("offline-items");
+      var empty = document.getElementById("offline-empty");
+      var allRows = [];
+
+      function setSidebar(open) {
+        sidebar.classList.toggle("is-open", open);
+        sidebarToggle.setAttribute("aria-expanded", String(open));
+        sidebarToggle.setAttribute("aria-label", open ? "Close navigation" : "Open navigation");
+        sidebarBackdrop.hidden = !open;
+        document.body.classList.toggle("sidebar-open", open);
+      }
+
+      sidebarToggle.addEventListener("click", function () { setSidebar(!sidebar.classList.contains("is-open")); });
+      sidebarBackdrop.addEventListener("click", function () { setSidebar(false); });
+      document.getElementById("retry-button").addEventListener("click", function () { location.reload(); });
+
+      function filterRows() {
+        var query = searchInput.value.trim().toLocaleLowerCase();
+        var visibleCount = 0;
+        allRows.forEach(function (row) {
+          var visible = !query || row.dataset.searchName.indexOf(query) !== -1;
+          row.hidden = !visible;
+          if (visible) visibleCount += 1;
+        });
+        searchClear.hidden = !searchInput.value;
+        table.hidden = !allRows.length;
+        empty.hidden = visibleCount > 0;
+        empty.querySelector("h3").textContent = allRows.length ? "No matching items" : "No saved offline items";
+        empty.querySelector("p").textContent = allRows.length
+          ? "Try a different search term."
+          : "No files or folders have been saved for offline access in this session.";
+      }
+
+      searchInput.addEventListener("input", filterRows);
+      searchClear.addEventListener("click", function () {
+        searchInput.value = "";
+        searchInput.focus();
+        filterRows();
+      });
+
+      function textCell(className, label, value) {
+        var cell = document.createElement("td");
+        cell.className = className;
+        cell.dataset.label = label;
+        cell.textContent = value;
+        return cell;
+      }
+
+      function iconUrl(manifest, requests) {
+        if (manifest.item.kind === "folder") return "/static/images/Folder.png";
+        var candidates = requests.map(function (request) {
+          var url = new URL(request.url);
+          return url.pathname.indexOf("/static/images/") === 0 ? url.pathname : "";
+        }).filter(function (path) {
+          return path && !/\/(JF(?:\.png|\.ico)|ss\.png)$/.test(path);
+        });
+        return candidates[0] || "/static/images/JF.ico";
+      }
+
+      function addItem(manifest, requests) {
+        if (!manifest || !manifest.item || !manifest.open_url) return;
+        var name = manifest.item.name || "Saved item";
+        var kind = manifest.item.kind || "item";
+        var row = document.createElement("tr");
+        row.dataset.searchName = name.toLocaleLowerCase();
+        var nameCell = document.createElement("td");
+        nameCell.className = "file-name";
+        nameCell.dataset.label = "Name";
+        var link = document.createElement("a");
+        link.href = manifest.open_url;
+        var icon = document.createElement("img");
+        icon.className = "file-type-icon";
+        icon.src = iconUrl(manifest, requests);
+        icon.alt = "";
+        link.appendChild(icon);
+        link.appendChild(document.createTextNode(name));
+        nameCell.appendChild(link);
+        row.appendChild(nameCell);
+        row.appendChild(textCell("column-type", "Type", kind.charAt(0).toUpperCase() + kind.slice(1)));
+        row.appendChild(textCell("column-size", "Files", String(Number(manifest.file_count) || (kind === "file" ? 1 : 0))));
+        row.appendChild(textCell("column-modified offline-status", "Availability", "Available offline"));
+        var actionsCell = document.createElement("td");
+        actionsCell.className = "actions";
+        actionsCell.dataset.label = "Actions";
+        var actions = document.createElement("div");
+        actions.className = "actions2";
+        var openLink = document.createElement("a");
+        openLink.className = "button secondary";
+        openLink.href = manifest.open_url;
+        openLink.textContent = "Open";
+        actions.appendChild(openLink);
+        actionsCell.appendChild(actions);
+        row.appendChild(actionsCell);
+        list.appendChild(row);
+        allRows.push(row);
+      }
+
+      async function loadSavedItems() {
+        if (!("caches" in window)) return;
+        var scope = "public";
+        try { scope = localStorage.getItem("jfcmOfflineScopeSegment") || "public"; } catch (_error) {}
+        var publicPrefix = "jfcm-offline-item-v2-public-";
+        var privatePrefix = scope.indexOf("private-") === 0 ? "jfcm-offline-item-v2-" + scope + "-" : "";
+        var names = (await caches.keys()).filter(function (name) {
+          return name.indexOf(publicPrefix) === 0 || (privatePrefix && name.indexOf(privatePrefix) === 0);
+        });
+        var saved = [];
+        for (var i = 0; i < names.length; i += 1) {
+          var cache = await caches.open(names[i]);
+          var requests = await cache.keys();
+          var manifestRequest = requests.find(function (request) {
+            return new URL(request.url).pathname.indexOf("/offline-manifest/") === 0;
+          });
+          if (!manifestRequest) continue;
+          try {
+            var response = await cache.match(manifestRequest);
+            var manifest = await response.json();
+            saved.push({ manifest: manifest, requests: requests });
+          } catch (_error) {}
+        }
+        saved.sort(function (a, b) {
+          return String(a.manifest.item.name || "").localeCompare(String(b.manifest.item.name || ""), undefined, { sensitivity: "base" });
+        });
+        saved.forEach(function (entry) { addItem(entry.manifest, entry.requests); });
+      }
+
+      loadSavedItems().catch(function () {}).finally(function () {
+        results.setAttribute("aria-busy", "false");
+        filterRows();
+      });
+    })();
+  </script>
+</body>
+</html>

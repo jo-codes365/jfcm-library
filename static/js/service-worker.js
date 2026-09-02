@@ -1,6 +1,6 @@
 "use strict";
 
-const CORE_CACHE = "jfcm-offline-core-v3";
+const CORE_CACHE = "jfcm-offline-core-v4";
 const SCOPE_CACHE = "jfcm-offline-scope-v2";
 const ITEM_CACHE_PREFIX = "jfcm-offline-item-v2-";
 const PUBLIC_ITEM_PREFIX = ITEM_CACHE_PREFIX + "public-";
@@ -65,7 +65,7 @@ self.addEventListener("activate", function (event) {
   event.waitUntil((async function () {
     const names = await caches.keys();
     await Promise.all(names.filter(function (name) {
-      return name === "jfcm-offline-core-v1" || name === "jfcm-offline-core-v2" || name.startsWith("jfcm-offline-item-v1-");
+      return name === "jfcm-offline-core-v1" || name === "jfcm-offline-core-v2" || name === "jfcm-offline-core-v3" || name.startsWith("jfcm-offline-item-v1-");
     }).map(function (name) { return caches.delete(name); }));
     activeScope = await readScope();
     await self.clients.claim();
