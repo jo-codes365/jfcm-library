@@ -2931,6 +2931,7 @@ button {
   display: inline-grid;
   /* width: 30px;
   height: 30px; */
+  font-size: 1rem;
   place-items: center;
   padding: 5px;
   color: #6b7280;
