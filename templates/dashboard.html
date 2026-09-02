@@ -8,9 +8,11 @@
       JFCM Pantry
     </a>
     {% if is_public_workspace %}
+    {% if not session.get('user_id') %}
     <nav class="sidebar-nav">
       <a class="sidebar-link active" href="{{ url_for('public_files') }}"><i class="bi bi-file-earmark-arrow-up"></i>Public Files</a>
     </nav>
+    {% endif %}
     <div class="sidebar-footer">
       {% if session.get('user_id') %}
       <a class="sidebar-link secondary" href="{{ url_for('dashboard') }}"><i class="bi bi-folder2-open"></i> My Files</a>
@@ -38,7 +40,6 @@
     <nav class="sidebar-nav">
       <a class="sidebar-link {% if section == 'files' %}active{% endif %}" href="{{ url_for('public_folder', share_token=share_context.token) if is_shared_workspace and share_context.kind == 'folder' else url_for('public_event', share_token=share_context.token) if is_shared_workspace and share_context.kind == 'event' else url_for('dashboard') }}"><i class="bi bi-file-earmark-arrow-up"></i>{{ 'Public folder' if is_shared_workspace and share_context.kind == 'folder' else 'Public Event' if is_shared_workspace and share_context.kind == 'event' else 'My Files' }}</a>
       {% if not is_shared_workspace %}
-      <a class="sidebar-link" href="{{ url_for('public_files') }}"><i class="bi bi-globe2"></i>Public Files</a>
       <hr style="width: 100%; margin: 3px 0; background-color: #cbd2dc; size: 0.5px;">
       <a class="sidebar-link {% if section == 'recent' %}active{% endif %}" href="{{ url_for('dashboard', section='recent') }}"><i class="bi bi-clock"></i>Recent</a>
       <a class="sidebar-link starred {% if section == 'starred' %}active{% endif %}" href="{{ url_for('dashboard', section='starred') }}"><i class="bi bi-star"></i>Starred</a>
