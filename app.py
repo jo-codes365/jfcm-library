@@ -184,8 +184,8 @@ def login_required(view):
     return wrapped
 
 
-def login_or_public_share_required(view):
-    """Allow an active signed-in session or a valid public share context."""
+def login_or_public_link_required(view):
+    """Allow an active signed-in session or a valid public-link context."""
     @wraps(view)
     def wrapped(*args, **kwargs):
         share_context = request_share_context()
@@ -203,30 +203,6 @@ def login_or_public_share_required(view):
             purge_expired_trash(session["user_id"])
         return view(*args, **kwargs)
     return wrapped
-
-
-PERMISSION_LEVELS = {"viewer": 1, "editor": 2, "owner": 3}
-
-
-def normalize_permission(permission, default="viewer"):
-    permission = (permission or "").strip().lower()
-    return permission if permission in {"viewer", "editor"} else default
-
-
-def normalize_link_permission(permission, default="private"):
-    """Link visibility is deliberately separate from a user's share permission."""
-    permission = (permission or "").strip().lower()
-    return permission if permission in {"private", "public"} else default
-
-
-def permission_at_least(permission, required):
-    return PERMISSION_LEVELS.get(permission or "", 0) >= PERMISSION_LEVELS[required]
-
-
-def item_table(kind):
-    if kind not in {"file", "folder", "event"}:
-        abort(400)
-    return "files" if kind == "file" else "folders" if kind == "folder" else "events"
 
 
 def delete_physical_file(owner_id, stored_filename):
@@ -295,17 +271,11 @@ def purge_expired_trash(owner_id):
         cursor.close()
 
 
-def share_table(kind):
-    if kind not in {"file", "folder", "event"}:
-        abort(400)
-    return "file_user_shares" if kind == "file" else "folder_user_shares" if kind == "folder" else "event_user_shares"
-
-
 def file_record(file_id, include_deleted=False):
     deleted_condition = "" if include_deleted else " AND files.is_deleted = FALSE"
     return query_one(
         "SELECT files.id, files.user_id, files.original_filename, files.stored_filename, files.file_size, files.mime_type, "
-        "files.uploaded_at, files.accessed_at, files.share_token, files.share_permission, files.is_share_link_enabled, "
+        "files.uploaded_at, files.accessed_at, files.share_token, "
         "files.folder_id, files.event_id, files.is_starred, users.username AS owner "
         "FROM files JOIN users ON users.id = files.user_id "
         "WHERE files.id = %s" + deleted_condition,
@@ -316,7 +286,7 @@ def file_record(file_id, include_deleted=False):
 def event_record(event_id, include_deleted=False):
     condition = "" if include_deleted else " AND is_deleted = FALSE"
     return query_one(
-        "SELECT id, user_id, name, event_date, event_type, share_token, share_permission, is_share_link_enabled, "
+        "SELECT id, user_id, name, event_date, event_type, share_token, "
         "is_starred, is_deleted, created_at "
         "FROM events WHERE id = %s" + condition,
         (event_id,),
@@ -333,8 +303,8 @@ def owned_file(file_id):
 def owned_folder(folder_id, include_deleted=False):
     condition = "" if include_deleted else " AND is_deleted = FALSE"
     return query_one(
-        "SELECT id, user_id, parent_id, event_id, original_parent_id, name, share_token, share_permission, "
-        "is_share_link_enabled, is_starred, is_deleted "
+        "SELECT id, user_id, parent_id, event_id, original_parent_id, name, share_token, "
+        "is_starred, is_deleted "
         "FROM folders WHERE id = %s AND user_id = %s" + condition,
         (folder_id, session["user_id"]),
     )
@@ -343,8 +313,8 @@ def owned_folder(folder_id, include_deleted=False):
 def folder_record(folder_id, include_deleted=False):
     condition = "" if include_deleted else " AND is_deleted = FALSE"
     return query_one(
-        "SELECT id, user_id, parent_id, event_id, original_parent_id, name, share_token, share_permission, "
-        "is_share_link_enabled, is_starred, is_deleted, created_at "
+        "SELECT id, user_id, parent_id, event_id, original_parent_id, name, share_token, "
+        "is_starred, is_deleted, created_at "
         "FROM folders WHERE id = %s" + condition,
         (folder_id,),
     )
@@ -480,98 +450,49 @@ def share_context_from_token(kind, share_token):
     current_user_id = session.get("user_id")
     if kind == "file":
         record = query_one(
-            "SELECT id, user_id, share_token, share_permission, is_share_link_enabled "
+            "SELECT id, user_id, event_id, share_token "
             "FROM files WHERE share_token = %s AND is_deleted = FALSE",
             (share_token,),
         )
         if not record:
             return None
-        link_permission = "viewer" if record["is_share_link_enabled"] and normalize_link_permission(record["share_permission"]) == "public" else None
-        user_share = query_one(
-            "SELECT permission FROM file_user_shares WHERE file_id = %s AND shared_with_user_id = %s",
-            (record["id"], current_user_id),
-        )
-        if current_user_id and record["user_id"] == current_user_id:
-            permission = "owner"
-        else:
-            permission = None
-            if link_permission:
-                permission = link_permission
-            if user_share:
-                shared_permission = normalize_permission(user_share["permission"])
-                if permission is None or permission_at_least(shared_permission, permission):
-                    permission = shared_permission
-            if permission is None:
-                return None
         return {
             "kind": "file",
             "token": share_token,
             "item_id": record["id"],
             "owner_id": record["user_id"],
-            "permission": permission,
+            "can_edit": bool(current_user_id and record["user_id"] == current_user_id),
         }
 
     if kind == "event":
         record = query_one(
-            "SELECT id, user_id, share_token, share_permission, is_share_link_enabled "
+            "SELECT id, user_id, share_token "
             "FROM events WHERE share_token = %s AND is_deleted = FALSE",
             (share_token,),
         )
         if not record:
             return None
-        user_share = query_one(
-            "SELECT permission FROM event_user_shares WHERE event_id = %s AND shared_with_user_id = %s",
-            (record["id"], current_user_id),
-        )
-        if current_user_id and record["user_id"] == current_user_id:
-            permission = "owner"
-        else:
-            permission = None
-            if record["is_share_link_enabled"] and normalize_link_permission(record["share_permission"]) == "public":
-                permission = "viewer"
-            if user_share:
-                shared_permission = normalize_permission(user_share["permission"])
-                if permission is None or permission_at_least(shared_permission, permission):
-                    permission = shared_permission
-            if permission is None:
-                return None
         return {
             "kind": "event",
             "token": share_token,
             "item_id": record["id"],
             "owner_id": record["user_id"],
-            "permission": permission,
+            "can_edit": bool(current_user_id and record["user_id"] == current_user_id),
         }
 
     record = query_one(
-        "SELECT id, user_id, share_token, share_permission, is_share_link_enabled "
+        "SELECT id, user_id, share_token "
         "FROM folders WHERE share_token = %s AND is_deleted = FALSE",
         (share_token,),
     )
     if not record:
         return None
-    user_share = query_one(
-        "SELECT permission FROM folder_user_shares WHERE folder_id = %s AND shared_with_user_id = %s",
-        (record["id"], current_user_id),
-    )
-    if current_user_id and record["user_id"] == current_user_id:
-        permission = "owner"
-    else:
-        permission = None
-        if record["is_share_link_enabled"] and normalize_link_permission(record["share_permission"]) == "public":
-            permission = "viewer"
-        if user_share:
-            shared_permission = normalize_permission(user_share["permission"])
-            if permission is None or permission_at_least(shared_permission, permission):
-                permission = shared_permission
-        if permission is None:
-            return None
     return {
         "kind": "folder",
         "token": share_token,
         "item_id": record["id"],
         "owner_id": record["user_id"],
-        "permission": permission,
+        "can_edit": bool(current_user_id and record["user_id"] == current_user_id),
     }
 
 
@@ -583,119 +504,52 @@ def request_share_context():
     return None
 
 
-def require_share_manage_access(kind, item_id):
-    if kind not in {"file", "folder", "event"}:
-        abort(404)
-    record = owned_file(item_id) if kind == "file" else owned_folder(item_id) if kind == "folder" else owned_event(item_id)
-    if not record:
-        abort(404)
-    return record
-
-
-def direct_event_share_permission(event_id):
-    share = query_one(
-        "SELECT permission FROM event_user_shares WHERE event_id = %s AND shared_with_user_id = %s",
-        (event_id, session["user_id"]),
-    )
-    return normalize_permission(share["permission"]) if share else None
-
-
-def direct_folder_share_permission(folder_id):
-    chain = folder_chain(folder_id)
-    best_permission = None
-    for folder in chain:
-        share = query_one(
-            "SELECT permission FROM folder_user_shares WHERE folder_id = %s AND shared_with_user_id = %s",
-            (folder["id"], session["user_id"]),
-        )
-        if share:
-            permission = normalize_permission(share["permission"])
-            if best_permission is None or permission_at_least(permission, best_permission):
-                best_permission = permission
-                if permission == "editor":
-                    break
-    if chain:
-        event_id = chain[0].get("event_id")
-        if event_id:
-            event_permission = direct_event_share_permission(event_id)
-            if event_permission and (best_permission is None or permission_at_least(event_permission, best_permission)):
-                best_permission = event_permission
-    return best_permission
-
-
-def direct_file_share_permission(record):
-    share = query_one(
-        "SELECT permission FROM file_user_shares WHERE file_id = %s AND shared_with_user_id = %s",
-        (record["id"], session["user_id"]),
-    )
-    if share:
-        return normalize_permission(share["permission"])
-    best_permission = None
-    folder_id = record.get("folder_id")
-    if folder_id:
-        best_permission = direct_folder_share_permission(folder_id)
-    event_id = record.get("event_id")
-    if event_id:
-        event_permission = direct_event_share_permission(event_id)
-        if event_permission and (best_permission is None or permission_at_least(event_permission, best_permission)):
-            best_permission = event_permission
-    return best_permission
-
-
-def accessible_event(event_id, required="viewer", share_context=None, include_deleted=False):
+def accessible_event(event_id, require_owner=False, share_context=None, include_deleted=False):
     event = event_record(event_id, include_deleted=include_deleted)
     if not event:
         return None
     if session.get("user_id") and event["user_id"] == session["user_id"]:
-        return {**event, "access_permission": "owner", "access_via": "owner"}
-    direct_permission = direct_event_share_permission(event["id"]) if session.get("user_id") else None
-    if direct_permission and permission_at_least(direct_permission, required):
-        return {**event, "access_permission": direct_permission, "access_via": "event_share"}
+        return {**event, "can_edit": True, "access_via": "owner"}
+    if require_owner:
+        return None
     if share_context and share_context["kind"] == "event" and share_context["owner_id"] == event["user_id"]:
-        if event["id"] == share_context["item_id"] and permission_at_least(share_context["permission"], required):
-            return {**event, "access_permission": share_context["permission"], "access_via": "event_link"}
+        if event["id"] == share_context["item_id"]:
+            return {**event, "can_edit": False, "access_via": "event_link"}
     return None
 
 
-def accessible_folder(folder_id, required="viewer", share_context=None, include_deleted=False):
+def accessible_folder(folder_id, require_owner=False, share_context=None, include_deleted=False):
     folder = folder_record(folder_id, include_deleted=include_deleted)
     if not folder:
         return None
     if session.get("user_id") and folder["user_id"] == session["user_id"]:
-        return {**folder, "access_permission": "owner", "access_via": "owner"}
-    direct_permission = direct_folder_share_permission(folder["id"]) if session.get("user_id") else None
-    if direct_permission and permission_at_least(direct_permission, required):
-        return {**folder, "access_permission": direct_permission, "access_via": "folder_share"}
-    if folder.get("event_id"):
-        event_permission = direct_event_share_permission(folder["event_id"]) if session.get("user_id") else None
-        if event_permission and permission_at_least(event_permission, required):
-            return {**folder, "access_permission": event_permission, "access_via": "event_share"}
+        return {**folder, "can_edit": True, "access_via": "owner"}
+    if require_owner:
+        return None
     if share_context and share_context["kind"] == "folder" and share_context["owner_id"] == folder["user_id"]:
         if folder["id"] == share_context["item_id"] or folder_is_within(folder["id"], share_context["item_id"]):
-            if permission_at_least(share_context["permission"], required):
-                return {**folder, "access_permission": share_context["permission"], "access_via": "folder_link"}
+            return {**folder, "can_edit": False, "access_via": "folder_link"}
     if share_context and share_context["kind"] == "event" and share_context["owner_id"] == folder["user_id"]:
-        if folder.get("event_id") == share_context["item_id"] and permission_at_least(share_context["permission"], required):
-            return {**folder, "access_permission": share_context["permission"], "access_via": "event_link"}
+        if folder.get("event_id") == share_context["item_id"]:
+            return {**folder, "can_edit": False, "access_via": "event_link"}
     return None
 
 
-def accessible_file(file_id, required="viewer", share_context=None):
+def accessible_file(file_id, require_owner=False, share_context=None):
     record = file_record(file_id)
     if not record:
         return None
     if session.get("user_id") and record["user_id"] == session["user_id"]:
-        return {**record, "access_permission": "owner", "access_via": "owner"}
-    direct_permission = direct_file_share_permission(record) if session.get("user_id") else None
-    if direct_permission and permission_at_least(direct_permission, required):
-        return {**record, "access_permission": direct_permission, "access_via": "direct_share"}
+        return {**record, "can_edit": True, "access_via": "owner"}
+    if require_owner:
+        return None
     if share_context and share_context["owner_id"] == record["user_id"]:
-        if share_context["kind"] == "file" and share_context["item_id"] == record["id"] and permission_at_least(share_context["permission"], required):
-            return {**record, "access_permission": share_context["permission"], "access_via": "file_link"}
-        if share_context["kind"] == "folder" and record["folder_id"] and folder_is_within(record["folder_id"], share_context["item_id"]) and permission_at_least(share_context["permission"], required):
-            return {**record, "access_permission": share_context["permission"], "access_via": "folder_link"}
-        if share_context["kind"] == "event" and record.get("event_id") == share_context["item_id"] and permission_at_least(share_context["permission"], required):
-            return {**record, "access_permission": share_context["permission"], "access_via": "event_link"}
+        if share_context["kind"] == "file" and share_context["item_id"] == record["id"]:
+            return {**record, "can_edit": False, "access_via": "file_link"}
+        if share_context["kind"] == "folder" and record["folder_id"] and folder_is_within(record["folder_id"], share_context["item_id"]):
+            return {**record, "can_edit": False, "access_via": "folder_link"}
+        if share_context["kind"] == "event" and record.get("event_id") == share_context["item_id"]:
+            return {**record, "can_edit": False, "access_via": "event_link"}
     return None
 
 
@@ -707,9 +561,9 @@ def redirect_to_workspace(default=None):
         allowed_paths = {url_for("dashboard")}
         share_context = request_share_context()
         if share_context and share_context["kind"] == "folder":
-            allowed_paths.add(url_for("shared_folder", share_token=share_context["token"]))
+            allowed_paths.add(url_for("public_folder", share_token=share_context["token"]))
         if share_context and share_context["kind"] == "event":
-            allowed_paths.add(url_for("shared_event", share_token=share_context["token"]))
+            allowed_paths.add(url_for("public_event", share_token=share_context["token"]))
         if (not parsed.netloc or parsed.netloc == request.host) and parsed.path in allowed_paths:
             return redirect(target)
     return redirect(default or url_for("dashboard"))
@@ -723,9 +577,9 @@ def workspace_return_url(default=None):
         allowed_paths = {url_for("dashboard")}
         share_context = request_share_context()
         if share_context and share_context["kind"] == "folder":
-            allowed_paths.add(url_for("shared_folder", share_token=share_context["token"]))
+            allowed_paths.add(url_for("public_folder", share_token=share_context["token"]))
         if share_context and share_context["kind"] == "event":
-            allowed_paths.add(url_for("shared_event", share_token=share_context["token"]))
+            allowed_paths.add(url_for("public_event", share_token=share_context["token"]))
         if (not parsed.netloc or parsed.netloc == request.host) and parsed.path in allowed_paths:
             return target
     return default or url_for("dashboard")
@@ -1249,23 +1103,8 @@ def dashboard():
     selected_event_date_raw = request.args.get("event_date", "").strip()
     search_query = request.args.get("search", "").strip()
     calendar_year, calendar_month = normalized_calendar_month(request.args.get("calendar_year"), request.args.get("calendar_month"))
-    if section not in {"files", "recent", "starred", "trash", "events", "shared"}:
+    if section not in {"files", "recent", "starred", "trash", "events"}:
         abort(404)
-    if section == "shared":
-        items = shared_with_me_items(session["user_id"])
-        today = date.today()
-        return render_template(
-            "dashboard.html", page_title="Shared with me", items=items, total_storage=0, total_files=len(items),
-            section="shared", current_folder=None, breadcrumbs=[], folder_id=None, event_id=None, current_event=None,
-            selected_event_date=None, selected_event_date_iso="", is_event_date_workspace=False,
-            date_workspace_events=[], is_trash=False, move_folders=[], sidebar_events=[], search_query="",
-            calendar_auto_open=False, is_global_search=False, is_shared_workspace=False,
-            workspace_can_edit=False, workspace_can_manage_sharing=False, share_context=None,
-            is_shared_listing=True,
-            month_name=calendar_module.month_name[today.month], year=today.year, month=today.month,
-            weeks=sunday_first_month_weeks(today.year, today.month), events_by_day={}, calendar_day_urls={},
-            calendar_previous_url="", calendar_next_url="", show_calendar_back_link=False,
-        )
     try:
         selected_event_date = date.fromisoformat(selected_event_date_raw) if selected_event_date_raw else None
     except ValueError:
@@ -1323,7 +1162,7 @@ def dashboard():
         events = []
         if is_event_date_workspace and not search_query:
             cursor.execute(
-                "SELECT id, name, event_date, event_type, share_token, is_share_link_enabled, created_at, is_starred FROM events "
+                "SELECT id, name, event_date, event_type, share_token, created_at, is_starred FROM events "
                 "WHERE user_id = %s AND is_deleted = FALSE AND event_date = %s ORDER BY name",
                 (session["user_id"], selected_event_date),
             )
@@ -1332,7 +1171,7 @@ def dashboard():
             folders = []
             files = []
         elif section == "events" and event_id is None and not search_query:
-            cursor.execute("SELECT id, name, event_date, event_type, share_token, is_share_link_enabled, created_at, is_starred FROM events WHERE user_id = %s AND is_deleted = FALSE ORDER BY event_date, name", (session["user_id"],))
+            cursor.execute("SELECT id, name, event_date, event_type, share_token, created_at, is_starred FROM events WHERE user_id = %s AND is_deleted = FALSE ORDER BY event_date, name", (session["user_id"],))
             events = cursor.fetchall()
             folders = []
             files = []
@@ -1362,7 +1201,7 @@ def dashboard():
             cursor.execute(
                 "SELECT id, name, parent_id, "
                 + ("deleted_at, deleted_at AS created_at, " if deleted else "created_at, ")
-                + "accessed_at, is_starred, share_token, is_share_link_enabled FROM folders "
+                + "accessed_at, is_starred, share_token FROM folders "
                 f"WHERE user_id = %s AND is_deleted = %s AND name LIKE %s{folder_scope_sql}{event_scope_sql} ORDER BY name",
                 (session["user_id"], deleted, search_term, *folder_scope_values, *event_scope_values),
             )
@@ -1370,14 +1209,14 @@ def dashboard():
             cursor.execute(
                 "SELECT id, original_filename, folder_id, file_size, mime_type, "
                 + ("deleted_at, deleted_at AS uploaded_at, " if deleted else "uploaded_at, ")
-                + "accessed_at, is_starred, share_token, is_share_link_enabled FROM files "
+                + "accessed_at, is_starred, share_token FROM files "
                 f"WHERE user_id = %s AND is_deleted = %s AND original_filename LIKE %s{file_scope_sql}{event_scope_sql} ORDER BY uploaded_at DESC",
                 (session["user_id"], deleted, search_term, *folder_scope_values, *event_scope_values),
             )
             files = cursor.fetchall()
             if section == "trash":
                 cursor.execute(
-                    "SELECT id, name, event_date, event_type, share_token, is_share_link_enabled, deleted_at, created_at, is_starred FROM events "
+                    "SELECT id, name, event_date, event_type, share_token, deleted_at, created_at, is_starred FROM events "
                     "WHERE user_id = %s AND is_deleted = TRUE AND name LIKE %s ORDER BY deleted_at DESC",
                     (session["user_id"], search_term),
                 )
@@ -1392,7 +1231,7 @@ def dashboard():
             where = "user_id = %s AND is_deleted = TRUE AND event_id IS NULL"
             values = (session["user_id"],)
             cursor.execute(
-                "SELECT id, name, event_date, event_type, share_token, is_share_link_enabled, deleted_at, created_at, is_starred FROM events "
+                "SELECT id, name, event_date, event_type, share_token, deleted_at, created_at, is_starred FROM events "
                 "WHERE user_id = %s AND is_deleted = TRUE ORDER BY deleted_at DESC",
                 (session["user_id"],),
             )
@@ -1408,7 +1247,7 @@ def dashboard():
             values = (session["user_id"], folder_id)
         if not search_query and not (section == "events" and event_id is None) and not is_event_date_workspace:
             folder_date = "deleted_at, deleted_at AS created_at" if deleted else "COALESCE(accessed_at, created_at) AS created_at" if section == "recent" else "created_at"
-            cursor.execute(f"SELECT id, name, parent_id, share_token, is_share_link_enabled, {folder_date}, accessed_at, is_starred FROM folders WHERE {where} ORDER BY created_at DESC", values)
+            cursor.execute(f"SELECT id, name, parent_id, share_token, {folder_date}, accessed_at, is_starred FROM folders WHERE {where} ORDER BY created_at DESC", values)
             folders = cursor.fetchall()
         sizes = folder_sizes(cursor, [folder["id"] for folder in folders], include_deleted=deleted)
         for folder in folders:
@@ -1416,7 +1255,7 @@ def dashboard():
         if not search_query and not (section == "events" and event_id is None) and not is_event_date_workspace:
             file_where = where.replace("parent_id", "folder_id")
             file_date = "deleted_at, deleted_at AS uploaded_at" if deleted else "COALESCE(accessed_at, uploaded_at) AS uploaded_at" if section == "recent" else "uploaded_at"
-            cursor.execute(f"SELECT id, original_filename, folder_id, file_size, mime_type, share_token, is_share_link_enabled, {file_date}, accessed_at, is_starred FROM files WHERE {file_where} ORDER BY uploaded_at DESC", values)
+            cursor.execute(f"SELECT id, original_filename, folder_id, file_size, mime_type, share_token, {file_date}, accessed_at, is_starred FROM files WHERE {file_where} ORDER BY uploaded_at DESC", values)
             files = cursor.fetchall()
         if section == "events" and event_id is not None:
             cursor.execute("SELECT id, name FROM folders WHERE user_id = %s AND is_deleted = FALSE AND event_id = %s ORDER BY name", (session["user_id"], event_id))
@@ -1482,9 +1321,7 @@ def dashboard():
             is_global_search=bool(search_query),
             is_shared_workspace=False,
             workspace_can_edit=True,
-            workspace_can_manage_sharing=True,
             share_context=None,
-            is_shared_listing=False,
             **calendar_context,
         )
     except MySQLError:
@@ -1514,9 +1351,7 @@ def dashboard():
             is_global_search=False,
             is_shared_workspace=False,
             workspace_can_edit=True,
-            workspace_can_manage_sharing=True,
             share_context=None,
-            is_shared_listing=False,
             month_name=calendar_module.month_name[calendar_month],
             year=calendar_year,
             month=calendar_month,
@@ -1528,23 +1363,28 @@ def dashboard():
         )
 
 
+@app.get("/public-files")
+def public_files():
+    return public_dashboard()
+
+
 def public_dashboard():
-    """Render only resources whose owner explicitly enabled a share link."""
+    """Render active resources with public tokens in a read-only workspace."""
     cursor = get_db().cursor(dictionary=True)
     try:
         cursor.execute(
             "SELECT id, name, share_token, created_at FROM folders "
-            "WHERE is_deleted = FALSE AND event_id IS NULL AND is_share_link_enabled = TRUE AND share_permission = 'public' AND share_token IS NOT NULL ORDER BY created_at DESC"
+            "WHERE is_deleted = FALSE AND event_id IS NULL AND share_token IS NOT NULL ORDER BY created_at DESC"
         )
         folders = cursor.fetchall()
         cursor.execute(
             "SELECT id, original_filename, file_size, mime_type, share_token, uploaded_at FROM files "
-            "WHERE is_deleted = FALSE AND event_id IS NULL AND is_share_link_enabled = TRUE AND share_permission = 'public' AND share_token IS NOT NULL ORDER BY uploaded_at DESC"
+            "WHERE is_deleted = FALSE AND share_token IS NOT NULL ORDER BY uploaded_at DESC"
         )
         files = cursor.fetchall()
         cursor.execute(
             "SELECT id, name, event_date, event_type, share_token, created_at FROM events "
-            "WHERE is_deleted = FALSE AND is_share_link_enabled = TRUE AND share_permission = 'public' AND share_token IS NOT NULL ORDER BY event_date, name"
+            "WHERE is_deleted = FALSE AND share_token IS NOT NULL ORDER BY event_date, name"
         )
         events = cursor.fetchall()
     except MySQLError:
@@ -1556,13 +1396,13 @@ def public_dashboard():
     items = (
         [{"kind": "folder", "name": item["name"], "parent_id": None, "size": 0, "file_size": 0,
           "mime_type": "Folder", "location": "Public Files", "date": item["created_at"], "accessed_at": None,
-          "is_starred": False, "is_share_link_enabled": True, **item} for item in folders]
+          "is_starred": False, **item} for item in folders]
         + [{"kind": "file", "name": item["original_filename"], "parent_id": None, "folder_id": None,
             "location": "Public Files", "date": item["uploaded_at"], "accessed_at": None, "is_starred": False,
-            "is_share_link_enabled": True, **item} for item in files]
+            **item} for item in files]
         + [{"kind": "event", "name": item["name"], "parent_id": None, "size": 0, "file_size": 0,
             "mime_type": "Event", "location": "Public Files", "date": item["event_date"], "accessed_at": None,
-            "is_starred": False, "is_share_link_enabled": True, **item} for item in events]
+            "is_starred": False, **item} for item in events]
     )
     return render_template(
         "dashboard.html", page_title="Public Files", items=items, total_storage=0, total_files=len(items),
@@ -1570,8 +1410,7 @@ def public_dashboard():
         selected_event_date=None, selected_event_date_iso="", is_event_date_workspace=False,
         date_workspace_events=[], is_trash=False, move_folders=[], sidebar_events=[], search_query="",
         calendar_auto_open=False, is_global_search=False, is_shared_workspace=False, is_public_workspace=True,
-        workspace_can_edit=False, workspace_can_manage_sharing=False, share_context=None,
-        is_shared_listing=False,
+        workspace_can_edit=False, share_context=None,
         month_name=calendar_module.month_name[date.today().month], year=date.today().year, month=date.today().month,
         weeks=sunday_first_month_weeks(date.today().year, date.today().month), events_by_day={}, calendar_day_urls={},
         calendar_previous_url="", calendar_next_url="", show_calendar_back_link=False,
@@ -1617,12 +1456,12 @@ def upload():
             abort(400)
         else:
             folder_id = int(raw_folder_id)
-        target_folder = accessible_folder(folder_id, required="editor", share_context=share_context) if folder_id else None
+        target_folder = accessible_folder(folder_id, require_owner=True, share_context=share_context) if folder_id else None
         if raw_folder_id not in (None, "", "root") and not target_folder:
             abort(404)
         upload_owner_id = share_context["owner_id"]
         if share_context["kind"] == "event":
-            target_event = accessible_event(share_context["item_id"], required="editor", share_context=share_context)
+            target_event = accessible_event(share_context["item_id"], require_owner=True, share_context=share_context)
             if not target_event:
                 abort(404)
             event_id = target_event["id"]
@@ -1646,9 +1485,9 @@ def upload():
             event_id = folder_event_id
 
     if share_context and share_context["kind"] == "event":
-        upload_return_url = url_for("shared_event", share_token=share_context["token"], folder=folder_id) if folder_id else url_for("shared_event", share_token=share_context["token"])
+        upload_return_url = url_for("public_event", share_token=share_context["token"], folder=folder_id) if folder_id else url_for("public_event", share_token=share_context["token"])
     elif share_context and share_context["kind"] == "folder":
-        upload_return_url = url_for("shared_folder", share_token=share_context["token"], folder=folder_id) if folder_id else url_for("shared_folder", share_token=share_context["token"])
+        upload_return_url = url_for("public_folder", share_token=share_context["token"], folder=folder_id) if folder_id else url_for("public_folder", share_token=share_context["token"])
     elif event_id is not None:
         upload_return_url = url_for("dashboard", section="events", event=event_id, folder=folder_id) if folder_id else url_for("dashboard", section="events", event=event_id)
     else:
@@ -1688,8 +1527,8 @@ def upload():
                 cursor = get_db().cursor()
                 try:
                     cursor.execute(
-                        "INSERT INTO folders (user_id, parent_id, event_id, name) VALUES (%s, %s, %s, %s)",
-                        (upload_owner_id, parent_id, event_id, safe_part),
+                        "INSERT INTO folders (user_id, parent_id, event_id, name, share_token) VALUES (%s, %s, %s, %s, %s)",
+                        (upload_owner_id, parent_id, event_id, safe_part, secrets.token_urlsafe(32)),
                     )
                     folder_cache[cache_key] = cursor.lastrowid
                     get_db().commit()
@@ -1742,8 +1581,18 @@ def upload():
         try:
             cursor = get_db().cursor()
             cursor.execute(
-                "INSERT INTO files (user_id, original_filename, stored_filename, file_size, mime_type, share_token, folder_id, event_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
-                (upload_owner_id, original_name, stored_name, file_size, incoming.mimetype or "application/octet-stream", share_token, target_folder_id, event_id),
+                "INSERT INTO files (user_id, original_filename, stored_filename, file_size, mime_type, share_token, folder_id, event_id) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                (
+                    upload_owner_id,
+                    original_name,
+                    stored_name,
+                    file_size,
+                    incoming.mimetype or "application/octet-stream",
+                    share_token,
+                    target_folder_id,
+                    event_id,
+                ),
             )
             get_db().commit()
             uploaded += 1
@@ -1771,7 +1620,7 @@ def upload():
 
 
 @app.get("/download/<int:file_id>")
-@login_or_public_share_required
+@login_or_public_link_required
 def download(file_id):
     share_context = request_share_context()
     try:
@@ -1790,7 +1639,7 @@ def download(file_id):
 
 
 @app.get("/download/folder/<int:folder_id>")
-@login_or_public_share_required
+@login_or_public_link_required
 def download_folder(folder_id):
     share_context = request_share_context()
     try:
@@ -1847,7 +1696,7 @@ def download_folder(folder_id):
 
 
 @app.get("/download/event/<int:event_id>")
-@login_or_public_share_required
+@login_or_public_link_required
 def download_event(event_id):
     share_context = request_share_context()
     event = accessible_event(event_id, share_context=share_context)
@@ -1866,7 +1715,7 @@ def download_event(event_id):
 
 
 @app.get("/offline-manifest/<kind>/<int:item_id>")
-@login_or_public_share_required
+@login_or_public_link_required
 def offline_manifest(kind, item_id):
     if kind not in {"file", "folder", "event"}:
         abort(404)
@@ -1948,13 +1797,13 @@ def offline_manifest(kind, item_id):
     elif kind == "folder":
         root_download_url = url_for("download_folder", folder_id=item_id, **context_params)
         if share_context and share_context["kind"] == "event":
-            root_open_url = url_for("shared_event", share_token=share_context["token"], folder=item_id)
+            root_open_url = url_for("public_event", share_token=share_context["token"], folder=item_id)
             urls.append(root_open_url)
-            urls.extend(url_for("shared_event", share_token=share_context["token"], folder=folder["id"]) for folder in folders if folder["id"] != item_id)
+            urls.extend(url_for("public_event", share_token=share_context["token"], folder=folder["id"]) for folder in folders if folder["id"] != item_id)
         elif share_context:
-            root_open_url = url_for("shared_folder", share_token=share_context["token"])
+            root_open_url = url_for("public_folder", share_token=share_context["token"])
             urls.append(root_open_url)
-            urls.extend(url_for("shared_folder", share_token=share_context["token"], folder=folder["id"]) for folder in folders if folder["id"] != item_id)
+            urls.extend(url_for("public_folder", share_token=share_context["token"], folder=folder["id"]) for folder in folders if folder["id"] != item_id)
         else:
             root_open_url = url_for("dashboard", folder=item_id)
             urls.append(root_open_url)
@@ -1962,9 +1811,9 @@ def offline_manifest(kind, item_id):
     else:
         root_download_url = url_for("download_event", event_id=item_id, **context_params)
         if share_context:
-            root_open_url = url_for("shared_event", share_token=share_context["token"])
+            root_open_url = url_for("public_event", share_token=share_context["token"])
             urls.append(root_open_url)
-            urls.extend(url_for("shared_event", share_token=share_context["token"], folder=folder["id"]) for folder in folders)
+            urls.extend(url_for("public_event", share_token=share_context["token"], folder=folder["id"]) for folder in folders)
         else:
             root_open_url = url_for("dashboard", section="events", event=item_id)
             urls.append(root_open_url)
@@ -2061,8 +1910,7 @@ def preview(file_id):
         move_folders=move_folders,
         workspace_return_url=workspace_return_url(),
         file_location="Public Files" if is_public_workspace else file_location(record),
-        workspace_can_edit=not is_public_workspace and permission_at_least(record["access_permission"], "editor"),
-        workspace_can_manage_sharing=not is_public_workspace and record["access_permission"] == "owner",
+        workspace_can_edit=record["can_edit"],
         is_public_workspace=is_public_workspace,
         share_context=share_context,
     )
@@ -2080,8 +1928,6 @@ def token_preview(share_token):
         abort(500)
     if not record:
         abort(404)
-    if record.get("event_id") is not None:
-        abort(404)
     is_public_workspace = "user_id" not in session
     move_folders = []
     if not is_public_workspace:
@@ -2098,8 +1944,7 @@ def token_preview(share_token):
         move_folders=move_folders,
         workspace_return_url=workspace_return_url(),
         file_location="Public Files" if is_public_workspace else file_location(record),
-        workspace_can_edit=not is_public_workspace and permission_at_least(record["access_permission"], "editor"),
-        workspace_can_manage_sharing=not is_public_workspace and record["access_permission"] == "owner",
+        workspace_can_edit=record["can_edit"],
         is_public_workspace=is_public_workspace,
         share_context=share_context,
     )
@@ -2187,8 +2032,8 @@ def create_folder():
         cursor = get_db().cursor()
         try:
             cursor.execute(
-                "INSERT INTO folders (user_id, parent_id, event_id, name) VALUES (%s, %s, %s, %s)",
-                (session["user_id"], parent_id, event_id, name),
+                "INSERT INTO folders (user_id, parent_id, event_id, name, share_token) VALUES (%s, %s, %s, %s, %s)",
+                (session["user_id"], parent_id, event_id, name, secrets.token_urlsafe(32)),
             )
             get_db().commit()
             flash("Folder created.", "success")
@@ -2222,8 +2067,8 @@ def create_event():
     cursor = get_db().cursor()
     try:
         cursor.execute(
-            "INSERT INTO events (user_id, name, event_date, event_type) VALUES (%s, %s, %s, %s)",
-            (session["user_id"], name, event_date, event_type),
+            "INSERT INTO events (user_id, name, event_date, event_type, share_token) VALUES (%s, %s, %s, %s, %s)",
+            (session["user_id"], name, event_date, event_type, secrets.token_urlsafe(32)),
         )
         get_db().commit()
         flash("Event created.", "success")
@@ -2252,7 +2097,7 @@ def rename_item():
     table = "files" if kind == "file" else "folders"
     column = "original_filename" if kind == "file" else "name"
     if kind == "file":
-        record = accessible_file(int(raw_id), required="editor", share_context=share_context)
+        record = accessible_file(int(raw_id), require_owner=True, share_context=share_context)
         if not record:
             abort(404)
         original_extension = Path(record["original_filename"]).suffix
@@ -2263,7 +2108,7 @@ def rename_item():
         if original_extension:
             safe_name = f"{safe_name[:-len(submitted_extension)] if submitted_extension else safe_name}{original_extension}"
     else:
-        record = accessible_folder(int(raw_id), required="editor", share_context=share_context)
+        record = accessible_folder(int(raw_id), require_owner=True, share_context=share_context)
         if not record:
             abort(404)
     cursor = get_db().cursor()
@@ -2355,7 +2200,7 @@ def move_items():
         elif not str(raw_destination).isdigit():
             abort(400)
         else:
-            destination_folder = accessible_folder(int(raw_destination), required="editor", share_context=share_context)
+            destination_folder = accessible_folder(int(raw_destination), require_owner=True, share_context=share_context)
             if not destination_folder:
                 abort(404)
             destination = destination_folder["id"]
@@ -2368,14 +2213,14 @@ def move_items():
             abort(400)
         item_id = int(raw_id)
         if kind == "folder":
-            folder = accessible_folder(item_id, required="editor", share_context=share_context)
+            folder = accessible_folder(item_id, require_owner=True, share_context=share_context)
             if not folder or destination == item_id or (destination and destination in folder_descendants(item_id, owner_id=folder["user_id"])):
                 abort(400)
             if destination_folder and destination_folder.get("event_id") != folder.get("event_id"):
                 abort(400)
             query = "UPDATE folders SET parent_id = %s WHERE id = %s AND user_id = %s AND is_deleted = FALSE"
         else:
-            file_record = accessible_file(item_id, required="editor", share_context=share_context)
+            file_record = accessible_file(item_id, require_owner=True, share_context=share_context)
             if not file_record:
                 abort(404)
             if destination_folder and destination_folder.get("event_id") != file_record.get("event_id"):
@@ -2613,145 +2458,8 @@ def bulk_download():
     return send_file(archive, as_attachment=True, download_name="jfcmpila-files.zip", mimetype="application/zip")
 
 
-def ensure_item_share_token(kind, item_id):
-    table = item_table(kind)
-    record = query_one(f"SELECT share_token FROM {table} WHERE id = %s", (item_id,))
-    if record and record.get("share_token"):
-        return record["share_token"]
-    token = secrets.token_urlsafe(32)
-    cursor = get_db().cursor()
-    try:
-        cursor.execute(f"UPDATE {table} SET share_token = %s WHERE id = %s", (token, item_id))
-        get_db().commit()
-        return token
-    except MySQLError:
-        get_db().rollback()
-        raise
-    finally:
-        cursor.close()
-
-
-def inherited_share_sources(kind, record):
-    sources = []
-    if kind in {"file", "folder"} and record.get("folder_id"):
-        chain = folder_chain(record["folder_id"] if kind == "file" else record["id"])
-        if kind == "folder" and chain and chain[0]["id"] == record["id"]:
-            chain = chain[1:]
-        for folder in chain:
-            has_user_shares = bool(query_one("SELECT id FROM folder_user_shares WHERE folder_id = %s LIMIT 1", (folder["id"],)))
-            if has_user_shares or folder.get("is_share_link_enabled"):
-                sources.append({
-                    "kind": "folder",
-                    "id": folder["id"],
-                    "name": folder["name"],
-                    "display_name": display_name(folder["name"]),
-                    "has_link": bool(folder.get("is_share_link_enabled")),
-                    "share_permission": normalize_link_permission(folder.get("share_permission")),
-                })
-                break
-    event_id = record.get("event_id")
-    if event_id:
-        event = event_record(event_id)
-        if event:
-            has_event_shares = bool(query_one("SELECT id FROM event_user_shares WHERE event_id = %s LIMIT 1", (event_id,)))
-            if has_event_shares or event.get("is_share_link_enabled"):
-                sources.append({
-                    "kind": "event",
-                    "id": event["id"],
-                    "name": event["name"],
-                    "display_name": display_name(event["name"]),
-                    "has_link": bool(event.get("is_share_link_enabled")),
-                    "share_permission": normalize_link_permission(event.get("share_permission")),
-                })
-    return sources
-
-
-def item_share_overview(kind, item_id):
-    share_table_name = share_table(kind)
-    item_column = f"{kind}_id"
-    if kind == "file":
-        record = file_record(item_id)
-        name = record["original_filename"] if record else None
-    elif kind == "folder":
-        record = folder_record(item_id)
-        name = record["name"] if record else None
-    else:
-        record = event_record(item_id)
-        name = record["name"] if record else None
-    if not record:
-        return None
-    cursor = get_db().cursor(dictionary=True)
-    try:
-        cursor.execute(
-            f"SELECT users.id, users.username, users.email, shares.permission "
-            f"FROM {share_table_name} AS shares "
-            f"JOIN users ON users.id = shares.shared_with_user_id "
-            f"WHERE shares.{item_column} = %s ORDER BY users.username, users.email",
-            (item_id,),
-        )
-        shared_users = cursor.fetchall()
-    finally:
-        cursor.close()
-    link_url = ""
-    if record.get("share_token"):
-        link_url = url_for("token_preview" if kind == "file" else "shared_folder" if kind == "folder" else "shared_event", share_token=record["share_token"], _external=True)
-    return {
-        "item_name": name,
-        "item_display_name": display_name(name),
-        "link": {
-            "enabled": bool(record["is_share_link_enabled"]),
-            "permission": normalize_link_permission(record["share_permission"]),
-            "url": link_url,
-        },
-        "users": shared_users,
-        "inherited_sources": inherited_share_sources(kind, record),
-    }
-
-
-def shared_with_me_items(user_id):
-    """Return only the roots explicitly shared with this account.
-
-    Descendants are intentionally reached through their shared folder/Event root so
-    inherited access never has to be copied into another user's storage.
-    """
-    cursor = get_db().cursor(dictionary=True)
-    try:
-        cursor.execute(
-            "SELECT files.id, files.original_filename AS name, files.file_size, files.mime_type, files.share_token, "
-            "files.uploaded_at AS date, shares.permission FROM file_user_shares AS shares "
-            "JOIN files ON files.id = shares.file_id "
-            "WHERE shares.shared_with_user_id = %s AND files.is_deleted = FALSE AND files.event_id IS NULL AND files.share_token IS NOT NULL "
-            "ORDER BY files.uploaded_at DESC",
-            (user_id,),
-        )
-        files = cursor.fetchall()
-        cursor.execute(
-            "SELECT folders.id, folders.name, folders.share_token, folders.created_at AS date, shares.permission FROM folder_user_shares AS shares "
-            "JOIN folders ON folders.id = shares.folder_id "
-            "WHERE shares.shared_with_user_id = %s AND folders.is_deleted = FALSE AND folders.event_id IS NULL AND folders.share_token IS NOT NULL "
-            "ORDER BY folders.created_at DESC",
-            (user_id,),
-        )
-        folders = cursor.fetchall()
-        cursor.execute(
-            "SELECT events.id, events.name, events.event_date AS date, events.event_type, events.share_token, shares.permission FROM event_user_shares AS shares "
-            "JOIN events ON events.id = shares.event_id "
-            "WHERE shares.shared_with_user_id = %s AND events.is_deleted = FALSE AND events.share_token IS NOT NULL "
-            "ORDER BY events.event_date, events.name",
-            (user_id,),
-        )
-        events = cursor.fetchall()
-    finally:
-        cursor.close()
-    return (
-        [{"kind": "folder", "parent_id": None, "size": 0, "file_size": 0, "mime_type": "Folder", "location": "Shared with me", "accessed_at": None, "is_starred": False, "is_share_link_enabled": False, "shared_permission": item["permission"], **item} for item in folders]
-        + [{"kind": "file", "parent_id": None, "folder_id": None, "location": "Shared with me", "accessed_at": None, "is_starred": False, "is_share_link_enabled": False, "shared_permission": item["permission"], **item} for item in files]
-        + [{"kind": "event", "parent_id": None, "size": 0, "file_size": 0, "mime_type": "Event", "location": "Shared with me", "accessed_at": None, "is_starred": False, "is_share_link_enabled": False, "shared_permission": item["permission"], **item} for item in events]
-    )
-
-
 @app.get("/folder/<share_token>")
-def shared_folder(share_token):
+def public_folder(share_token):
     if not re.fullmatch(r"[A-Za-z0-9_-]{32,64}", share_token):
         abort(404)
     share_context = share_context_from_token("folder", share_token)
@@ -2774,7 +2482,7 @@ def shared_folder(share_token):
     cursor = get_db().cursor(dictionary=True)
     try:
         cursor.execute(
-            "SELECT id, name, parent_id, created_at, accessed_at, is_starred, share_token, is_share_link_enabled FROM folders "
+            "SELECT id, name, parent_id, created_at, accessed_at, is_starred, share_token FROM folders "
             "WHERE user_id = %s AND is_deleted = FALSE AND event_id IS NULL AND parent_id <=> %s ORDER BY created_at DESC",
             (share_context["owner_id"], current_folder_id),
         )
@@ -2783,7 +2491,7 @@ def shared_folder(share_token):
         for folder in folders:
             folder["size"] = sizes.get(folder["id"], 0)
         cursor.execute(
-            "SELECT id, user_id, original_filename, folder_id, file_size, mime_type, uploaded_at, accessed_at, is_starred, share_token, is_share_link_enabled "
+            "SELECT id, user_id, original_filename, folder_id, file_size, mime_type, uploaded_at, accessed_at, is_starred, share_token "
             "FROM files WHERE user_id = %s AND is_deleted = FALSE AND event_id IS NULL AND folder_id <=> %s ORDER BY uploaded_at DESC",
             (share_context["owner_id"], current_folder_id),
         )
@@ -2820,17 +2528,15 @@ def shared_folder(share_token):
         search_query="",
         is_global_search=False,
         is_shared_workspace=True,
-        workspace_can_edit="user_id" in session and permission_at_least(share_context["permission"], "editor"),
-        workspace_can_manage_sharing="user_id" in session and share_context["permission"] == "owner",
+        workspace_can_edit=share_context["can_edit"],
         is_public_workspace="user_id" not in session,
         share_context=share_context,
-        is_shared_listing=False,
         shared_root_folder_id=share_context["item_id"],
     )
 
 
 @app.get("/event/<share_token>")
-def shared_event(share_token):
+def public_event(share_token):
     if not re.fullmatch(r"[A-Za-z0-9_-]{32,64}", share_token):
         abort(404)
     share_context = share_context_from_token("event", share_token)
@@ -2856,7 +2562,7 @@ def shared_event(share_token):
     cursor = get_db().cursor(dictionary=True)
     try:
         cursor.execute(
-            "SELECT id, name, parent_id, event_id, created_at, accessed_at, is_starred, share_token, is_share_link_enabled "
+            "SELECT id, name, parent_id, event_id, created_at, accessed_at, is_starred, share_token "
             "FROM folders WHERE user_id = %s AND is_deleted = FALSE AND event_id = %s AND parent_id <=> %s ORDER BY created_at DESC",
             (share_context["owner_id"], event_id, current_folder_id),
         )
@@ -2865,13 +2571,13 @@ def shared_event(share_token):
         for folder in folders:
             folder["size"] = sizes.get(folder["id"], 0)
         cursor.execute(
-            "SELECT id, user_id, original_filename, folder_id, event_id, file_size, mime_type, uploaded_at, accessed_at, is_starred, share_token, is_share_link_enabled "
+            "SELECT id, user_id, original_filename, folder_id, event_id, file_size, mime_type, uploaded_at, accessed_at, is_starred, share_token "
             "FROM files WHERE user_id = %s AND is_deleted = FALSE AND event_id = %s AND folder_id <=> %s ORDER BY uploaded_at DESC",
             (share_context["owner_id"], event_id, current_folder_id),
         )
         files = cursor.fetchall()
         cursor.execute("SELECT id, name FROM folders WHERE user_id = %s AND is_deleted = FALSE AND event_id = %s ORDER BY name", (share_context["owner_id"], event_id))
-        move_folders = [folder for folder in cursor.fetchall() if accessible_folder(folder["id"], required="editor", share_context=share_context)]
+        move_folders = [folder for folder in cursor.fetchall() if accessible_folder(folder["id"], require_owner=True, share_context=share_context)]
         cursor.execute("SELECT id, name, parent_id FROM folders WHERE user_id = %s AND is_deleted = FALSE AND event_id = %s", (share_context["owner_id"], event_id))
         paths = folder_paths(cursor.fetchall())
     finally:
@@ -2908,128 +2614,15 @@ def shared_event(share_token):
         calendar_auto_open=False,
         is_global_search=False,
         is_shared_workspace=True,
-        workspace_can_edit="user_id" in session and permission_at_least(share_context["permission"], "editor"),
-        workspace_can_manage_sharing="user_id" in session and share_context["permission"] == "owner",
+        workspace_can_edit=share_context["can_edit"],
         is_public_workspace="user_id" not in session,
         share_context=share_context,
-        is_shared_listing=False,
         month_name=calendar_module.month_name[date.today().month],
         year=date.today().year,
         month=date.today().month,
         weeks=sunday_first_month_weeks(date.today().year, date.today().month),
         events_by_day={},
     )
-
-
-@app.get("/shares/<kind>/<int:item_id>")
-@login_required
-def get_item_shares(kind, item_id):
-    require_share_manage_access(kind, item_id)
-    overview = item_share_overview(kind, item_id)
-    if not overview:
-        abort(404)
-    return jsonify({"ok": True, **overview})
-
-
-@app.post("/shares/<kind>/<int:item_id>/users")
-@login_required
-def add_item_share_user(kind, item_id):
-    record = require_share_manage_access(kind, item_id)
-    identifier = request.form.get("identifier", "").strip().lower()
-    permission = normalize_permission(request.form.get("permission"))
-    if not identifier:
-        return jsonify({"ok": False, "message": "Enter a username or email."}), 400
-    target_user = query_one(
-        "SELECT id, username, email FROM users WHERE (username = %s OR email = %s) LIMIT 1",
-        (identifier, identifier),
-    )
-    if not target_user or target_user["id"] == record["user_id"]:
-        return jsonify({"ok": False, "message": "Choose a different account."}), 400
-    table = share_table(kind)
-    item_column = f"{kind}_id"
-    # A restricted link token is a stable route for the recipient; it confers no
-    # access on its own, because the direct share is still checked on every use.
-    ensure_item_share_token(kind, item_id)
-    cursor = get_db().cursor()
-    try:
-        cursor.execute(
-            f"INSERT INTO {table} ({item_column}, shared_with_user_id, permission) VALUES (%s, %s, %s) "
-            f"ON DUPLICATE KEY UPDATE permission = VALUES(permission)",
-            (item_id, target_user["id"], permission),
-        )
-        get_db().commit()
-    except MySQLError:
-        get_db().rollback()
-        app.logger.exception("Share user update error")
-        return jsonify({"ok": False, "message": "Could not update sharing."}), 500
-    finally:
-        cursor.close()
-    return jsonify({"ok": True, **item_share_overview(kind, item_id)})
-
-
-@app.post("/shares/<kind>/<int:item_id>/users/<int:shared_user_id>")
-@login_required
-def update_item_share_user(kind, item_id, shared_user_id):
-    require_share_manage_access(kind, item_id)
-    action = request.form.get("action", "update").strip().lower()
-    table = share_table(kind)
-    item_column = f"{kind}_id"
-    cursor = get_db().cursor()
-    try:
-        if action == "remove":
-            cursor.execute(
-                f"DELETE FROM {table} WHERE {item_column} = %s AND shared_with_user_id = %s",
-                (item_id, shared_user_id),
-            )
-        else:
-            permission = normalize_permission(request.form.get("permission"))
-            cursor.execute(
-                f"UPDATE {table} SET permission = %s WHERE {item_column} = %s AND shared_with_user_id = %s",
-                (permission, item_id, shared_user_id),
-            )
-        get_db().commit()
-    except MySQLError:
-        get_db().rollback()
-        app.logger.exception("Share permission change error")
-        return jsonify({"ok": False, "message": "Could not update sharing."}), 500
-    finally:
-        cursor.close()
-    return jsonify({"ok": True, **item_share_overview(kind, item_id)})
-
-
-@app.post("/shares/<kind>/<int:item_id>/link")
-@login_required
-def update_item_share_link(kind, item_id):
-    require_share_manage_access(kind, item_id)
-    action = request.form.get("action", "update").strip().lower()
-    permission = normalize_link_permission(request.form.get("permission"))
-    table = item_table(kind)
-    cursor = get_db().cursor()
-    try:
-        if action == "disable":
-            cursor.execute(
-                f"UPDATE {table} SET is_share_link_enabled = FALSE WHERE id = %s AND user_id = %s",
-                (item_id, session["user_id"]),
-            )
-        elif action == "enable":
-            token = ensure_item_share_token(kind, item_id)
-            cursor.execute(
-                f"UPDATE {table} SET share_token = %s, share_permission = %s, is_share_link_enabled = TRUE WHERE id = %s AND user_id = %s",
-                (token, permission, item_id, session["user_id"]),
-            )
-        else:
-            cursor.execute(
-                f"UPDATE {table} SET share_permission = %s WHERE id = %s AND user_id = %s",
-                (permission, item_id, session["user_id"]),
-            )
-        get_db().commit()
-    except MySQLError:
-        get_db().rollback()
-        app.logger.exception("Share link update error")
-        return jsonify({"ok": False, "message": "Could not update link sharing."}), 500
-    finally:
-        cursor.close()
-    return jsonify({"ok": True, **item_share_overview(kind, item_id)})
 
 
 @app.errorhandler(RequestEntityTooLarge)

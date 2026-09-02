@@ -609,7 +609,7 @@ document.addEventListener("DOMContentLoaded", function () {
     togglePreviewModal("preview-properties-modal", true);
   });
   if (previewCopyAction) previewCopyAction.addEventListener("click", function () {
-    navigator.clipboard.writeText(previewCopyAction.dataset.shareUrl).then(function () {
+    navigator.clipboard.writeText(previewCopyAction.dataset.copyUrl).then(function () {
       showToast("Link copied.", "success");
       closePreviewMoreMenu();
     }).catch(function () {
@@ -1213,7 +1213,6 @@ document.addEventListener("DOMContentLoaded", function () {
   var moveItemButton = document.getElementById("move-item");
   var downloadItem = document.getElementById("download-item");
   var deleteItemButton = document.getElementById("delete-item");
-  var shareItemButton = document.getElementById("share-item");
   var propertiesItemButton = document.getElementById("properties-item");
   var offlineItemButton = document.getElementById("offline-item");
   var restoreItemButton = document.getElementById("restore-item");
@@ -1233,19 +1232,8 @@ document.addEventListener("DOMContentLoaded", function () {
   var editEventName = document.getElementById("edit-event-name");
   var editEventIconPicker = document.getElementById("edit-event-icon-picker");
   var cancelEditEvent = document.getElementById("cancel-edit-event");
-  var shareItemModal = document.getElementById("share-item-modal");
-  var shareUserForm = document.getElementById("share-user-form");
-  var shareIdentifier = document.getElementById("share-identifier");
-  var sharePermission = document.getElementById("share-permission");
-  var shareItemTitle = document.getElementById("share-item-title");
-  var shareItemTitleName = document.getElementById("share-item-title-name");
-  var shareUsersList = document.getElementById("share-users-list");
-  var shareLinkPanel = document.getElementById("share-link-panel");
-  var closeShareItem = document.getElementById("close-share-item");
-  var previewShareButton = document.getElementById("preview-share-button");
   var activeItemRow = null;
   var activeItemActionButton = null;
-  var activeShareTarget = null;
   var starredRemovalTimers = {};
   function closeItemActions() {
     if (itemActionsModal) itemActionsModal.hidden = true;
@@ -1278,74 +1266,6 @@ document.addEventListener("DOMContentLoaded", function () {
   }
   function closeEditEvent() {
     if (editEventModal) editEventModal.hidden = true;
-  }
-  function closeShareModal() {
-    if (shareItemModal) shareItemModal.hidden = true;
-  }
-  function renderShareState(result) {
-    if (!shareUsersList || !shareLinkPanel) return;
-    if (shareItemTitleName) {
-      var resolvedName = result.item_display_name || result.item_name || (activeShareTarget && activeShareTarget.name) || "item";
-      shareItemTitleName.textContent = resolvedName;
-    }
-    var inheritedMarkup = "";
-    if (result.inherited_sources && result.inherited_sources.length) {
-      inheritedMarkup = "<dt>Inherited access</dt><dd>" + result.inherited_sources.map(function (source) {
-        var sourceLabel = source.kind === "event" ? "Event" : "Folder";
-        var parts = [];
-        if (source.has_link) parts.push("share link (" + escapeHtml(source.share_permission === "public" ? "Public" : "Private") + ")");
-        parts.push("shared users");
-        return "<div><strong>Inherited from " + sourceLabel + " \"" + escapeHtml(source.display_name || source.name) + "\"</strong><br><span>Access from its " + parts.join(" and ") + " also applies here. Add direct sharing below only if you want an explicit override.</span></div>";
-      }).join("") + "</dd>";
-    }
-    var linkMarkup = "";
-    if (result.link) {
-      linkMarkup = "<dt>Link permission</dt><dd><select id='share-link-permission' class='share-link-permission'>" +
-        "<option value='private'" + (result.link.permission === "private" ? " selected" : "") + ">Private (sign-in required)</option>" +
-        "<option value='public'" + (result.link.permission === "public" ? " selected" : "") + ">Public (view only)</option>" +
-        "</select></dd>" +
-        "<dt>Share link</dt><dd>" +
-        (result.link.enabled
-          ? "<div><button type='button' class='button secondary share-link-button' data-share-link-copy='true' data-share-url='" + escapeHtml(result.link.url) + "'>Copy link</button> <button type='button' class='button secondary share-link-button' data-share-link-toggle='disable'>Stop sharing</button></div>"
-          : "<div>Not shared <button type='button' class='button secondary share-link-button' data-share-link-toggle='enable'>Enable link</button></div>") +
-        "</dd>";
-    }
-    shareLinkPanel.innerHTML = linkMarkup;
-    var userMarkup = result.users && result.users.length
-      ? result.users.map(function (user) {
-        return "<dt>" + escapeHtml(user.username || user.email) + "</dt><dd><select class='share-user-permission' data-user-id='" + user.id + "'>" +
-          "<option value='viewer'" + (user.permission === "viewer" ? " selected" : "") + ">Viewer</option>" +
-          "<option value='editor'" + (user.permission === "editor" ? " selected" : "") + ">Editor</option>" +
-          "</select> <button type='button' class='link-action' data-share-user-remove='" + user.id + "'>Stop sharing</button></dd>";
-      }).join("")
-      : "<dt>Shared users</dt><dd>No one yet.</dd>";
-    shareUsersList.innerHTML = userMarkup + inheritedMarkup;
-  }
-  function shareApiUrl() {
-    if (!activeShareTarget) return "";
-    return "/shares/" + activeShareTarget.kind + "/" + activeShareTarget.itemId;
-  }
-  function loadShareState() {
-    if (!activeShareTarget) return;
-    fetch(shareApiUrl(), {
-      headers: { "X-Requested-With": "XMLHttpRequest" }
-    }).then(function (response) {
-      if (!response.ok) throw new Error("Load failed");
-      return response.json();
-    }).then(function (result) {
-      if (!result.ok) throw new Error("Load failed");
-      renderShareState(result);
-    }).catch(function () {
-      showToast("The sharing details could not be loaded.", "error");
-    });
-  }
-  function openShareModal(target) {
-    if (!shareItemModal || !target) return;
-    activeShareTarget = target;
-    if (shareItemTitleName) shareItemTitleName.textContent = target.name || "item";
-    shareItemModal.hidden = false;
-    if (shareIdentifier) shareIdentifier.focus();
-    loadShareState();
   }
   function closeProperties() {
     if (!propertiesPanel) return;
@@ -1410,7 +1330,7 @@ document.addEventListener("DOMContentLoaded", function () {
     }
     if (copyItemLink) {
       var isPublicRow = row.closest(".file-table")?.dataset.publicWorkspace === "true";
-      var copyUrl = row.dataset.shareUrl || (isPublicRow && row.dataset.openUrl ? new URL(row.dataset.openUrl, window.location.href).href : "");
+      var copyUrl = row.dataset.copyUrl || (isPublicRow && row.dataset.openUrl ? new URL(row.dataset.openUrl, window.location.href).href : "");
       copyItemLink.dataset.copyUrl = copyUrl;
       copyItemLink.hidden = !copyUrl;
     }
@@ -1504,21 +1424,11 @@ document.addEventListener("DOMContentLoaded", function () {
   if (copyItemLink) copyItemLink.addEventListener("click", function () {
     var row = activeItemRow;
     if (!row) return;
-    navigator.clipboard.writeText(copyItemLink.dataset.copyUrl || row.dataset.shareUrl).then(function () {
+    navigator.clipboard.writeText(copyItemLink.dataset.copyUrl || row.dataset.copyUrl).then(function () {
       showToast("Link copied.", "success");
     }).catch(function () {
       showToast("Copy failed. Please try again.", "error");
     });
-  });
-  if (shareItemButton) shareItemButton.addEventListener("click", function () {
-    var row = activeItemRow;
-    if (!row) return;
-    closeItemActions();
-    openShareModal({ kind: row.dataset.kind, itemId: row.dataset.itemId, name: row.dataset.itemDisplayName || row.dataset.itemName || "item" });
-  });
-  if (previewShareButton) previewShareButton.addEventListener("click", function () {
-    closePreviewMoreMenu();
-    openShareModal({ kind: previewShareButton.dataset.kind, itemId: previewShareButton.dataset.itemId, name: previewShareButton.dataset.itemName || "item" });
   });
   if (renameItemButton) renameItemButton.addEventListener("click", function () {
     var row = activeItemRow;
@@ -1567,127 +1477,6 @@ document.addEventListener("DOMContentLoaded", function () {
   });
   if (cancelRenameItem) cancelRenameItem.addEventListener("click", closeRenameItem);
   if (cancelEditEvent) cancelEditEvent.addEventListener("click", closeEditEvent);
-  if (closeShareItem) closeShareItem.addEventListener("click", closeShareModal);
-  if (shareItemModal) shareItemModal.addEventListener("click", function (event) {
-    if (event.target === shareItemModal) closeShareModal();
-  });
-  if (shareUserForm) shareUserForm.addEventListener("submit", function (event) {
-    event.preventDefault();
-    if (!activeShareTarget) return;
-    var payload = new FormData(shareUserForm);
-    fetch(shareApiUrl() + "/users", {
-      method: "POST",
-      body: payload,
-      headers: { "X-Requested-With": "XMLHttpRequest" }
-    }).then(function (response) {
-      if (!response.ok) throw new Error("Share failed");
-      return response.json();
-    }).then(function (result) {
-      if (!result.ok) throw new Error("Share failed");
-      renderShareState(result);
-      shareUserForm.reset();
-      if (sharePermission) sharePermission.value = "viewer";
-      showToast("Sharing updated.", "success");
-    }).catch(function () {
-      showToast("The item could not be shared.", "error");
-    });
-  });
-  document.addEventListener("change", function (event) {
-    if (!activeShareTarget) return;
-    if (event.target.id === "share-link-permission") {
-      var payload = new FormData();
-      var csrf = shareUserForm ? shareUserForm.querySelector("input[name='csrf_token']") : null;
-      if (csrf) payload.append("csrf_token", csrf.value);
-      payload.append("permission", event.target.value);
-      fetch(shareApiUrl() + "/link", {
-        method: "POST",
-        body: payload,
-        headers: { "X-Requested-With": "XMLHttpRequest" }
-      }).then(function (response) {
-        if (!response.ok) throw new Error("Link update failed");
-        return response.json();
-      }).then(function (result) {
-        renderShareState(result);
-        showToast("Link permission updated.", "success");
-      }).catch(function () {
-        showToast("The link permission could not be updated.", "error");
-      });
-      return;
-    }
-    if (event.target.classList.contains("share-user-permission")) {
-      var updatePayload = new FormData();
-      var updateCsrf = shareUserForm ? shareUserForm.querySelector("input[name='csrf_token']") : null;
-      if (updateCsrf) updatePayload.append("csrf_token", updateCsrf.value);
-      updatePayload.append("permission", event.target.value);
-      fetch(shareApiUrl() + "/users/" + event.target.dataset.userId, {
-        method: "POST",
-        body: updatePayload,
-        headers: { "X-Requested-With": "XMLHttpRequest" }
-      }).then(function (response) {
-        if (!response.ok) throw new Error("User update failed");
-        return response.json();
-      }).then(function (result) {
-        renderShareState(result);
-        showToast("User permission updated.", "success");
-      }).catch(function () {
-        showToast("The user permission could not be updated.", "error");
-      });
-    }
-  });
-  document.addEventListener("click", function (event) {
-    if (!activeShareTarget) return;
-    if (event.target.dataset.shareLinkCopy === "true") {
-      navigator.clipboard.writeText(event.target.dataset.shareUrl).then(function () {
-        showToast("Link copied.", "success");
-      }).catch(function () {
-        showToast("Copy failed. Please try again.", "error");
-      });
-      return;
-    }
-    if (event.target.dataset.shareLinkToggle) {
-      var payload = new FormData();
-      var csrf = shareUserForm ? shareUserForm.querySelector("input[name='csrf_token']") : null;
-      if (csrf) payload.append("csrf_token", csrf.value);
-      payload.append("action", event.target.dataset.shareLinkToggle);
-      if (shareLinkPanel) {
-        var linkPermission = shareLinkPanel.querySelector("#share-link-permission");
-        payload.append("permission", linkPermission ? linkPermission.value : "private");
-      }
-      fetch(shareApiUrl() + "/link", {
-        method: "POST",
-        body: payload,
-        headers: { "X-Requested-With": "XMLHttpRequest" }
-      }).then(function (response) {
-        if (!response.ok) throw new Error("Link toggle failed");
-        return response.json();
-      }).then(function (result) {
-        renderShareState(result);
-        showToast(event.target.dataset.shareLinkToggle === "disable" ? "Sharing stopped." : "Link sharing enabled.", "success");
-      }).catch(function () {
-        showToast("The link could not be updated.", "error");
-      });
-      return;
-    }
-    if (event.target.dataset.shareUserRemove) {
-      var removePayload = new FormData();
-      var removeCsrf = shareUserForm ? shareUserForm.querySelector("input[name='csrf_token']") : null;
-      if (removeCsrf) removePayload.append("csrf_token", removeCsrf.value);
-      removePayload.append("action", "remove");
-      fetch(shareApiUrl() + "/users/" + event.target.dataset.shareUserRemove, {
-        method: "POST",
-        body: removePayload,
-        headers: { "X-Requested-With": "XMLHttpRequest" }
-      }).then(function (response) {
-        if (!response.ok) throw new Error("Remove failed");
-        return response.json();
-      }).then(function (result) {
-        renderShareState(result);
-        showToast("Sharing removed.", "success");
-      }).catch(function () {
-        showToast("The sharing entry could not be removed.", "error");
-      });
-    }
-  });
   // if (renameItemModal) renameItemModal.addEventListener("click", function (event) {
   //   if (event.target === renameItemModal) closeRenameItem();
   // });
@@ -2129,7 +1918,7 @@ document.addEventListener("DOMContentLoaded", function () {
   var copyLink = document.getElementById("copy-link");
   if (copyLink) {
     copyLink.addEventListener("click", function () {
-      navigator.clipboard.writeText(copyLink.dataset.shareUrl).then(function () {
+      navigator.clipboard.writeText(copyLink.dataset.copyUrl).then(function () {
         showToast("Link copied.", "success");
       }).catch(function () {
         showToast("Copy failed. Please try again.", "error");

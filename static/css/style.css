@@ -925,12 +925,6 @@ table tbody tr:nth-child(even) {
   border-radius: 14px;
   font: inherit;
 }
-#share-link-permission {
-  min-height: 28px;
-  max-width: 75%;
-  padding: 4px 12px;
-}
-
 .modal-actions {
   display: flex;
   justify-content: flex-end;
@@ -979,15 +973,6 @@ table tbody tr:nth-child(even) {
 .rename-item-card {
   width: min(100%, 440px);
   border-radius: 8px;
-}
-#share-item-title-name {
-  font-size: 0.9rem;
-}
-#share-item-title {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .custom-dialog-message {
   margin: 0 0 20px;
@@ -1073,18 +1058,6 @@ table tbody tr:nth-child(even) {
   border-bottom: 1px solid #cbd2dc !important;
   /* border-radius: 0 !important; */
   padding-right: 0 !important;
-}
-#share-user-form .rename-filename-input {
-  flex-wrap: nowrap;
-}
-#share-identifier {
-  flex: 0 0 calc(70% - 4px);
-  width: calc(70% - 4px);
-}
-#share-permission {
-  flex: 0 0 calc(30% - 4px);
-  min-width: 0;
-  width: calc(30% - 4px);
 }
 .rename-item-extension {
   color: var(--muted);
@@ -2297,11 +2270,6 @@ table tbody tr:nth-child(even) {
 .secondary:hover {
   /* background: #e0e1e3; */
   background: var(--primary);
-}
-.share-link-button {
-  min-height: 32px;
-  padding: 5px 10px;
-  font-size: 0.82rem;
 }
 #folder-name {
   width: 100%;

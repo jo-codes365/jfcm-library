@@ -22,8 +22,6 @@ CREATE TABLE IF NOT EXISTS folders (
     original_parent_id INT UNSIGNED NULL,
     name VARCHAR(255) NOT NULL,
     share_token VARCHAR(64) NULL,
-    share_permission ENUM('private', 'public') NOT NULL DEFAULT 'private',
-    is_share_link_enabled BOOLEAN NOT NULL DEFAULT FALSE,
     is_starred BOOLEAN NOT NULL DEFAULT FALSE,
     is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
     deleted_at TIMESTAMP NULL,
@@ -44,8 +42,6 @@ CREATE TABLE IF NOT EXISTS events (
     event_date DATE NOT NULL,
     event_type VARCHAR(32) NOT NULL DEFAULT 'event',
     share_token VARCHAR(64) NULL,
-    share_permission ENUM('private', 'public') NOT NULL DEFAULT 'private',
-    is_share_link_enabled BOOLEAN NOT NULL DEFAULT FALSE,
     is_starred BOOLEAN NOT NULL DEFAULT FALSE,
     is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
     deleted_at TIMESTAMP NULL,
@@ -65,8 +61,6 @@ CREATE TABLE IF NOT EXISTS files (
     file_size BIGINT UNSIGNED NOT NULL,
     mime_type VARCHAR(255) NOT NULL,
     share_token VARCHAR(64) NOT NULL,
-    share_permission ENUM('private', 'public') NOT NULL DEFAULT 'private',
-    is_share_link_enabled BOOLEAN NOT NULL DEFAULT FALSE,
     folder_id INT UNSIGNED NULL,
     event_id INT UNSIGNED NULL,
     original_folder_id INT UNSIGNED NULL,
@@ -83,46 +77,4 @@ CREATE TABLE IF NOT EXISTS files (
     KEY idx_files_user_event (user_id, event_id, is_deleted),
     CONSTRAINT fk_files_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     CONSTRAINT fk_files_folder FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE SET NULL
-) ENGINE=InnoDB;
-
-CREATE TABLE IF NOT EXISTS file_user_shares (
-    id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    file_id INT UNSIGNED NOT NULL,
-    shared_with_user_id INT UNSIGNED NOT NULL,
-    permission ENUM('viewer', 'editor') NOT NULL DEFAULT 'viewer',
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    PRIMARY KEY (id),
-    UNIQUE KEY uq_file_user_shares_file_user (file_id, shared_with_user_id),
-    KEY idx_file_user_shares_user (shared_with_user_id),
-    CONSTRAINT fk_file_user_shares_file FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE,
-    CONSTRAINT fk_file_user_shares_user FOREIGN KEY (shared_with_user_id) REFERENCES users(id) ON DELETE CASCADE
-) ENGINE=InnoDB;
-
-CREATE TABLE IF NOT EXISTS folder_user_shares (
-    id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    folder_id INT UNSIGNED NOT NULL,
-    shared_with_user_id INT UNSIGNED NOT NULL,
-    permission ENUM('viewer', 'editor') NOT NULL DEFAULT 'viewer',
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    PRIMARY KEY (id),
-    UNIQUE KEY uq_folder_user_shares_folder_user (folder_id, shared_with_user_id),
-    KEY idx_folder_user_shares_user (shared_with_user_id),
-    CONSTRAINT fk_folder_user_shares_folder FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE CASCADE,
-    CONSTRAINT fk_folder_user_shares_user FOREIGN KEY (shared_with_user_id) REFERENCES users(id) ON DELETE CASCADE
-) ENGINE=InnoDB;
-
-CREATE TABLE IF NOT EXISTS event_user_shares (
-    id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    event_id INT UNSIGNED NOT NULL,
-    shared_with_user_id INT UNSIGNED NOT NULL,
-    permission ENUM('viewer', 'editor') NOT NULL DEFAULT 'viewer',
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    PRIMARY KEY (id),
-    UNIQUE KEY uq_event_user_shares_event_user (event_id, shared_with_user_id),
-    KEY idx_event_user_shares_user (shared_with_user_id),
-    CONSTRAINT fk_event_user_shares_event FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
-    CONSTRAINT fk_event_user_shares_user FOREIGN KEY (shared_with_user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
