@@ -2934,7 +2934,7 @@ button {
   font-size: 0.92rem !important;
   place-items: center;
   padding: 5px;
-  color: #6b7280;
+  color: var(--primary-dark);
 }
 .toggle-star > i {
   display: inline-grid;
