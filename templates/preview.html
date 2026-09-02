@@ -333,7 +333,7 @@
       {% endif %}
       <input type="hidden" name="items" value="file:{{ file.id }}">
       <select id="preview-move-destination" name="destination_id" required>
-        <option value="root"{% if not file.folder_id %} hidden disabled{% endif %}>Library</option>
+        <option value="root"{% if not file.folder_id %} hidden disabled{% endif %}>{{ 'Event' if file.event_id else 'Library' }}</option>
         {% for folder in move_folders %}
         {% if folder.id != file.folder_id %}
         <option value="{{ folder.id }}">{{ display_name(folder.name) }}</option>
