@@ -11,9 +11,14 @@
     .offline-workspace .workspace-title-content { min-width: 0; }
     .offline-workspace .workspace-title-actions { flex-direction: row; }
     .offline-workspace .file-name a { cursor: pointer; }
-    .offline-workspace .offline-status { color: var(--success); }
+    .offline-workspace .file-table th:nth-child(1), .offline-workspace .file-table td:nth-child(1) { width: 46%; }
+    .offline-workspace .file-table th:nth-child(2), .offline-workspace .file-table td:nth-child(2) { width: 16%; }
+    .offline-workspace .file-table th:nth-child(3), .offline-workspace .file-table td:nth-child(3) { width: 24%; }
+    .offline-workspace .file-table th:nth-child(4), .offline-workspace .file-table td:nth-child(4) { width: 14%; text-align: right; }
     .offline-icon { display: inline-flex; align-items: center; justify-content: center; width: 1.2em; height: 1.2em; flex: 0 0 auto; }
     .offline-icon svg { width: 100%; height: 100%; }
+    .offline-workspace .row-action .offline-icon { width: 1.1rem; height: 1.1rem; }
+    .offline-workspace .norms .offline-icon { flex: 0 0 1.1rem; width: 1.1rem; height: 1.1rem; }
     .offline-sidebar-note { margin: auto 12px 0; color: var(--muted); font-size: .78rem; line-height: 1.45; }
     @media (max-width: 480px) {
       .offline-workspace .workspace-title h1 { display: block; }
@@ -65,7 +70,7 @@
               <p>Files and items available without an internet connection.</p>
             </div>
             <div class="workspace-title-actions">
-              <button id="retry-button" class="button primary" type="button">Try again</button>
+              <button id="retry-button" class="button primary" type="button"><i class="bi bi-arrow-clockwise"> Refresh</button>
             </div>
           </section>
 
@@ -76,8 +81,7 @@
                   <tr>
                     <th>Name</th>
                     <th class="column-type">Type</th>
-                    <th class="column-size">Files</th>
-                    <th class="column-modified">Availability</th>
+                    <th class="column-modified">Date</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
@@ -89,9 +93,30 @@
               <p>No files or folders have been saved for offline access in this session.</p>
             </div>
           </section>
+          <aside id="properties-panel" class="properties-panel" hidden aria-labelledby="properties-panel-title">
+            <header>
+              <h2 id="properties-panel-title">Properties</h2>
+              <button id="close-properties-panel" class="row-action" type="button" aria-label="Close properties" title="Close">
+                <span class="offline-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 6 12 12M18 6 6 18"/></svg></span>
+              </button>
+            </header>
+            <dl id="properties-panel-list" class="item-properties"></dl>
+          </aside>
         </div>
       </div>
     </main>
+  </div>
+
+  <div id="item-actions-modal" class="modal item-actions-modal" hidden aria-modal="true" role="dialog" aria-labelledby="item-actions-title">
+    <section class="modal-card item-actions-card">
+      <div class="item-actions-header"><h2 id="item-actions-title" hidden>Item actions</h2></div>
+      <div class="item-actions-list">
+        <a id="open-item" class="norms" href=""><span class="offline-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 5h5v5M19 5l-9 9"/><path d="M19 14v4a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h4"/></svg></span>Open</a>
+        <a id="download-item" class="norms" href=""><span class="offline-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m-4-4 4 4 4-4M5 20h14"/></svg></span>Download</a>
+        <button id="unsave-item" class="norms" type="button"><span class="offline-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 18a4 4 0 0 1-.6-7.96A6 6 0 0 1 17.74 8.5 4.5 4.5 0 0 1 18.5 17H15"/><path d="m9 12 6 6m0-6-6 6"/></svg></span>Unsave Offline</button>
+        <button id="properties-item" class="norms" type="button"><span class="offline-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/></svg></span>Properties</button>
+      </div>
+    </section>
   </div>
 
   <script>
@@ -106,6 +131,15 @@
       var table = document.getElementById("offline-table");
       var list = document.getElementById("offline-items");
       var empty = document.getElementById("offline-empty");
+      var actionsModal = document.getElementById("item-actions-modal");
+      var openItem = document.getElementById("open-item");
+      var downloadItem = document.getElementById("download-item");
+      var unsaveItem = document.getElementById("unsave-item");
+      var propertiesItem = document.getElementById("properties-item");
+      var propertiesPanel = document.getElementById("properties-panel");
+      var propertiesList = document.getElementById("properties-panel-list");
+      var activeRow = null;
+      var activeActionButton = null;
       var allRows = [];
 
       function setSidebar(open) {
@@ -119,6 +153,100 @@
       sidebarToggle.addEventListener("click", function () { setSidebar(!sidebar.classList.contains("is-open")); });
       sidebarBackdrop.addEventListener("click", function () { setSidebar(false); });
       document.getElementById("retry-button").addEventListener("click", function () { location.reload(); });
+
+      function closeActions() {
+        actionsModal.hidden = true;
+        if (activeActionButton) activeActionButton.setAttribute("aria-expanded", "false");
+        activeActionButton = null;
+      }
+
+      function positionActions() {
+        if (actionsModal.hidden || !activeActionButton) return;
+        var card = actionsModal.querySelector(".item-actions-card");
+        var rect = activeActionButton.getBoundingClientRect();
+        var gap = 8;
+        var margin = 8;
+        var left = rect.right - card.offsetWidth;
+        var top = rect.bottom + gap;
+        if (top + card.offsetHeight > window.innerHeight - margin) top = rect.top - card.offsetHeight - gap;
+        card.style.left = Math.max(margin, Math.min(left, window.innerWidth - card.offsetWidth - margin)) + "px";
+        card.style.top = Math.max(margin, Math.min(top, window.innerHeight - card.offsetHeight - margin)) + "px";
+      }
+
+      function openActions(row, button) {
+        if (activeActionButton && activeActionButton !== button) activeActionButton.setAttribute("aria-expanded", "false");
+        activeRow = row;
+        activeActionButton = button;
+        openItem.href = row.dataset.openUrl;
+        downloadItem.href = row.dataset.downloadUrl;
+        document.getElementById("item-actions-title").textContent = row.dataset.kind === "folder" ? "Folder actions" : row.dataset.kind === "event" ? "Event actions" : "File actions";
+        actionsModal.hidden = false;
+        button.setAttribute("aria-expanded", "true");
+        positionActions();
+      }
+
+      function closeProperties() {
+        propertiesPanel.classList.remove("is-open");
+        document.querySelector(".workspace-content").classList.remove("properties-open");
+        window.setTimeout(function () { propertiesPanel.hidden = true; }, 140);
+      }
+
+      function addProperty(label, value) {
+        var term = document.createElement("dt");
+        var description = document.createElement("dd");
+        term.textContent = label;
+        description.textContent = value || "—";
+        propertiesList.appendChild(term);
+        propertiesList.appendChild(description);
+      }
+
+      function showProperties(row) {
+        propertiesList.replaceChildren();
+        addProperty("Name", row.dataset.itemName);
+        addProperty("Type", row.dataset.itemType);
+        addProperty("Size", row.dataset.itemSize);
+        addProperty("Location", "Saved Files Offline");
+        addProperty("Date", row.dataset.itemDate);
+        addProperty("Files", row.dataset.fileCount);
+        addProperty("Offline access", "Available");
+        propertiesPanel.hidden = false;
+        document.querySelector(".workspace-content").classList.add("properties-open");
+        window.requestAnimationFrame(function () { propertiesPanel.classList.add("is-open"); });
+        closeActions();
+      }
+
+      document.getElementById("close-properties-panel").addEventListener("click", closeProperties);
+      propertiesItem.addEventListener("click", function () { if (activeRow) showProperties(activeRow); });
+      unsaveItem.addEventListener("click", async function () {
+        if (!activeRow) return;
+        var row = activeRow;
+        closeActions();
+        try {
+          await caches.delete(row.dataset.cacheName);
+          allRows = allRows.filter(function (item) { return item !== row; });
+          row.remove();
+          if (propertiesPanel.classList.contains("is-open")) closeProperties();
+          filterRows();
+        } catch (_error) {}
+      });
+
+      document.addEventListener("click", function (event) {
+        var button = event.target.closest(".offline-workspace .more-actions-button");
+        if (button) {
+          event.preventDefault();
+          var row = button.closest("tr");
+          if (!actionsModal.hidden && activeActionButton === button) closeActions();
+          else openActions(row, button);
+          return;
+        }
+        if (!actionsModal.hidden && !actionsModal.querySelector(".item-actions-card").contains(event.target)) closeActions();
+      });
+      window.addEventListener("resize", positionActions);
+      document.addEventListener("keydown", function (event) {
+        if (event.key !== "Escape") return;
+        if (!actionsModal.hidden) closeActions();
+        else if (!propertiesPanel.hidden) closeProperties();
+      });
 
       function filterRows() {
         var query = searchInput.value.trim().toLocaleLowerCase();
@@ -163,12 +291,43 @@
         return candidates[0] || "/static/images/JF.ico";
       }
 
-      function addItem(manifest, requests) {
+      function inferredDownloadUrl(manifest, manifestRequest) {
+        if (manifest.download_url) return manifest.download_url;
+        var id = manifest.item.id;
+        var path = manifest.item.kind === "folder" ? "/download/folder/" + id
+          : manifest.item.kind === "event" ? "/download/event/" + id
+          : "/download/" + id;
+        return path + new URL(manifestRequest.url).search;
+      }
+
+      function readableSize(bytes) {
+        var size = Number(bytes) || 0;
+        var units = ["B", "KB", "MB", "GB"];
+        var unit = 0;
+        while (size >= 1024 && unit < units.length - 1) { size /= 1024; unit += 1; }
+        return (unit === 0 ? String(size) : String(Math.round(size * 10) / 10)) + " " + units[unit];
+      }
+
+      function addItem(manifest, requests, manifestRequest, cacheName) {
         if (!manifest || !manifest.item || !manifest.open_url) return;
         var name = manifest.item.name || "Saved item";
         var kind = manifest.item.kind || "item";
+        var details = manifest.details || {};
+        var type = details.type || kind.charAt(0).toUpperCase() + kind.slice(1);
+        var date = details.date || "—";
+        var downloadUrl = inferredDownloadUrl(manifest, manifestRequest);
         var row = document.createElement("tr");
         row.dataset.searchName = name.toLocaleLowerCase();
+        row.dataset.kind = kind;
+        row.dataset.itemId = String(manifest.item.id || "");
+        row.dataset.itemName = name;
+        row.dataset.itemType = type;
+        row.dataset.itemDate = date;
+        row.dataset.itemSize = readableSize(details.size);
+        row.dataset.fileCount = String(Number(manifest.file_count) || (kind === "file" ? 1 : 0));
+        row.dataset.openUrl = manifest.open_url;
+        row.dataset.downloadUrl = downloadUrl;
+        row.dataset.cacheName = cacheName;
         var nameCell = document.createElement("td");
         nameCell.className = "file-name";
         nameCell.dataset.label = "Name";
@@ -182,19 +341,30 @@
         link.appendChild(document.createTextNode(name));
         nameCell.appendChild(link);
         row.appendChild(nameCell);
-        row.appendChild(textCell("column-type", "Type", kind.charAt(0).toUpperCase() + kind.slice(1)));
-        row.appendChild(textCell("column-size", "Files", String(Number(manifest.file_count) || (kind === "file" ? 1 : 0))));
-        row.appendChild(textCell("column-modified offline-status", "Availability", "Available offline"));
+        row.appendChild(textCell("column-type", "Type", type));
+        row.appendChild(textCell("column-modified", "Date", date));
         var actionsCell = document.createElement("td");
         actionsCell.className = "actions";
         actionsCell.dataset.label = "Actions";
         var actions = document.createElement("div");
         actions.className = "actions2";
-        var openLink = document.createElement("a");
-        openLink.className = "button secondary";
-        openLink.href = manifest.open_url;
-        openLink.textContent = "Open";
-        actions.appendChild(openLink);
+        var downloadLink = document.createElement("a");
+        downloadLink.className = "row-action download-action";
+        downloadLink.href = downloadUrl;
+        downloadLink.setAttribute("aria-label", "Download " + name);
+        downloadLink.title = "Download";
+        downloadLink.innerHTML = '<span class="offline-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m-4-4 4 4 4-4M5 20h14"/></svg></span>';
+        var moreButton = document.createElement("button");
+        moreButton.className = "row-action more-actions-button";
+        moreButton.type = "button";
+        moreButton.setAttribute("aria-label", "More actions for " + name);
+        moreButton.title = "More actions";
+        moreButton.setAttribute("aria-haspopup", "menu");
+        moreButton.setAttribute("aria-controls", "item-actions-modal");
+        moreButton.setAttribute("aria-expanded", "false");
+        moreButton.innerHTML = '<span class="offline-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg></span>';
+        actions.appendChild(downloadLink);
+        actions.appendChild(moreButton);
         actionsCell.appendChild(actions);
         row.appendChild(actionsCell);
         list.appendChild(row);
@@ -221,13 +391,13 @@
           try {
             var response = await cache.match(manifestRequest);
             var manifest = await response.json();
-            saved.push({ manifest: manifest, requests: requests });
+            saved.push({ manifest: manifest, requests: requests, manifestRequest: manifestRequest, cacheName: names[i] });
           } catch (_error) {}
         }
         saved.sort(function (a, b) {
           return String(a.manifest.item.name || "").localeCompare(String(b.manifest.item.name || ""), undefined, { sensitivity: "base" });
         });
-        saved.forEach(function (entry) { addItem(entry.manifest, entry.requests); });
+        saved.forEach(function (entry) { addItem(entry.manifest, entry.requests, entry.manifestRequest, entry.cacheName); });
       }
 
       loadSavedItems().catch(function () {}).finally(function () {

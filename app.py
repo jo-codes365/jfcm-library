@@ -83,12 +83,12 @@ def send_welcome_email(email, subject="Welcome to JFCM Pila"):
         text = f"Welcome to JFCM Pila!\n\nYour account has been successfully created.\n\nYou can now sign in at the login page."
         html = f"""
         <html>
-          <body>
+            <body>
             <h2>Welcome to JFCM Pila!</h2>
             <p>Your account has been successfully created.</p>
             <p>You can now sign in using your email and password.</p>
             <p style="margin-top: 30px; color: #999;">This is an automated message, please do not reply.</p>
-          </body>
+            </body>
         </html>
         """
         
@@ -317,7 +317,7 @@ def event_record(event_id, include_deleted=False):
     condition = "" if include_deleted else " AND is_deleted = FALSE"
     return query_one(
         "SELECT id, user_id, name, event_date, event_type, share_token, share_permission, is_share_link_enabled, "
-        "is_starred, is_deleted "
+        "is_starred, is_deleted, created_at "
         "FROM events WHERE id = %s" + condition,
         (event_id,),
     )
@@ -344,7 +344,7 @@ def folder_record(folder_id, include_deleted=False):
     condition = "" if include_deleted else " AND is_deleted = FALSE"
     return query_one(
         "SELECT id, user_id, parent_id, event_id, original_parent_id, name, share_token, share_permission, "
-        "is_share_link_enabled, is_starred, is_deleted "
+        "is_share_link_enabled, is_starred, is_deleted, created_at "
         "FROM folders WHERE id = %s" + condition,
         (folder_id,),
     )
@@ -1895,10 +1895,13 @@ def offline_manifest(kind, item_id):
         urls.append(url_for("static", filename=f"images/{event_icon_file(root.get('event_type'))}"))
 
     root_open_url = ""
+    root_download_url = ""
     if kind == "file":
         root_open_url = url_for("preview", file_id=item_id, **context_params)
+        root_download_url = url_for("download", file_id=item_id, **context_params)
         urls.append(root_open_url)
     elif kind == "folder":
+        root_download_url = url_for("download_folder", folder_id=item_id, **context_params)
         if share_context and share_context["kind"] == "event":
             root_open_url = url_for("shared_event", share_token=share_context["token"], folder=item_id)
             urls.append(root_open_url)
@@ -1912,6 +1915,7 @@ def offline_manifest(kind, item_id):
             urls.append(root_open_url)
             urls.extend(url_for("dashboard", folder=folder["id"]) for folder in folders if folder["id"] != item_id)
     else:
+        root_download_url = url_for("download_event", event_id=item_id, **context_params)
         if share_context:
             root_open_url = url_for("shared_event", share_token=share_context["token"])
             urls.append(root_open_url)
@@ -1928,6 +1932,14 @@ def offline_manifest(kind, item_id):
             url_for("preview_content", file_id=file_id, **context_params),
             url_for("download", file_id=file_id, **context_params),
         ])
+
+    # Cache the root download as well as its browsable contents so both the
+    # table action and the overflow menu continue to work without a network.
+    urls.append(root_download_url)
+
+    item_date = root.get("uploaded_at") if kind == "file" else root.get("created_at") if kind == "folder" else root.get("event_date")
+    item_type = clean_file_type(root) if kind == "file" else "Folder" if kind == "folder" else event_type_label(root.get("event_type"))
+    item_size = int(root.get("file_size") or 0) if kind == "file" else sum(int(file_record.get("file_size") or 0) for file_record in files)
 
     preview_kinds = {preview_kind(file_record) for file_record in files}
     if "powerpoint" in preview_kinds:
@@ -1947,7 +1959,14 @@ def offline_manifest(kind, item_id):
             "name": root.get("original_filename") if kind == "file" else root.get("name"),
         },
         "open_url": root_open_url,
+        "download_url": root_download_url,
         "file_count": len(files),
+        "details": {
+            "type": item_type,
+            "date": format_datetime(item_date),
+            "size": item_size,
+            "location": "Saved Files Offline",
+        },
         "urls": list(dict.fromkeys(urls)),
     })
 
