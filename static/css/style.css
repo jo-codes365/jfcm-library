@@ -2535,7 +2535,12 @@ button {
   margin-left: auto;
 }
 .filter-menu {
-  right: 0;
+  top: calc(100% + 4px);
+  right: auto;
+  left: 0;
+  min-width: min(190px, calc(100vw - 16px));
+  max-width: calc(100vw - 16px);
+  margin-top: 0;
   /* width: 230px; */
   max-height: min(70vh, 520px);
   align-items: center;
@@ -3269,7 +3274,7 @@ hr {
     .file-workspace.mobile-select-mode .selection-cell {
         position: absolute;
         top: 15px;
-        left: 10px;
+        /* left: 10px; */
         z-index: 1;
         display: block;
     }

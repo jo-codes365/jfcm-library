@@ -1033,6 +1033,20 @@ document.addEventListener("DOMContentLoaded", function () {
     searchInput.focus();
     searchInput.dispatchEvent(new Event("input", { bubbles: true }));
   });
+  function positionFilterMenu(button, menu) {
+    if (!button || !menu || menu.hidden) return;
+    var viewportPadding = 8;
+    menu.style.left = "0px";
+    menu.style.right = "auto";
+    var buttonRect = button.getBoundingClientRect();
+    var menuRect = menu.getBoundingClientRect();
+    var maximumLeft = Math.max(viewportPadding, window.innerWidth - menuRect.width - viewportPadding);
+    var viewportLeft = Math.max(viewportPadding, Math.min(buttonRect.left, maximumLeft));
+    menu.style.left = viewportLeft - buttonRect.left + "px";
+    menuRect = menu.getBoundingClientRect();
+    var availableHeight = Math.max(0, window.innerHeight - menuRect.top - viewportPadding);
+    menu.style.maxHeight = Math.min(window.innerHeight * 0.7, 520, availableHeight) + "px";
+  }
   function toggleFilterMenu(button, menu) {
     if (!button || !menu) return;
     var shouldOpen = menu.hidden;
@@ -1044,6 +1058,7 @@ document.addEventListener("DOMContentLoaded", function () {
     });
     menu.hidden = !shouldOpen;
     button.setAttribute("aria-expanded", String(shouldOpen));
+    if (shouldOpen) positionFilterMenu(button, menu);
   }
   if (typeFilterButton && typeFilterMenu) {
     typeFilterButton.addEventListener("click", function (event) {
@@ -1141,6 +1156,10 @@ document.addEventListener("DOMContentLoaded", function () {
   setFilterButtonState(dateFilterButton, filterState.date, dateLabels, "Date");
   updateClearFiltersVisibility();
   applyFileFilters();
+  window.addEventListener("resize", function () {
+    positionFilterMenu(typeFilterButton, typeFilterMenu);
+    positionFilterMenu(dateFilterButton, dateFilterMenu);
+  });
   document.addEventListener("click", function (event) {
     if (sortMenu && sortButton && !sortMenu.hidden && !sortMenu.contains(event.target) && !sortButton.contains(event.target)) {
       sortMenu.hidden = true;
