@@ -3373,7 +3373,11 @@ hr {
     cursor: default;
   }
   .workspace-header {
-    padding-left: 66px;
+    padding-right: 14px;
+    padding-left: 68px;
+  }
+  .events-calendar-button {
+    margin-right: 0;
   }
   body.sidebar-open {
     overflow: hidden;

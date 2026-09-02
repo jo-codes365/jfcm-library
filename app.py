@@ -1937,7 +1937,10 @@ def offline_manifest(kind, item_id):
     # table action and the overflow menu continue to work without a network.
     urls.append(root_download_url)
 
-    item_date = root.get("uploaded_at") if kind == "file" else root.get("created_at") if kind == "folder" else root.get("event_date")
+    # Offline listings always show the item's original creation timestamp:
+    # uploaded_at for files and created_at for folders/events. Do not derive
+    # this value from access time, scheduled event date, or cache time.
+    item_date = root.get("uploaded_at") if kind == "file" else root.get("created_at")
     item_type = clean_file_type(root) if kind == "file" else "Folder" if kind == "folder" else event_type_label(root.get("event_type"))
     item_size = int(root.get("file_size") or 0) if kind == "file" else sum(int(file_record.get("file_size") or 0) for file_record in files)
 

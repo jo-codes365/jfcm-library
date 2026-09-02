@@ -2,7 +2,7 @@
 
 // Increment this version whenever the offline page, worker logic, or any
 // resource in CORE_URLS changes. Activation removes every older code cache.
-const OFFLINE_CACHE_VERSION = "v8";
+const OFFLINE_CACHE_VERSION = "v10";
 const CORE_CACHE_PREFIX = "jfcm-offline-core-";
 const CORE_CACHE = CORE_CACHE_PREFIX + OFFLINE_CACHE_VERSION;
 const SCOPE_CACHE_PREFIX = "jfcm-offline-scope-";
@@ -84,6 +84,30 @@ self.addEventListener("message", function (event) {
   event.waitUntil(update.catch(function () {}));
 });
 
+async function refreshSavedItemManifests() {
+  const names = await caches.keys();
+  await Promise.all(names.filter(function (name) {
+    return name.startsWith(ITEM_CACHE_PREFIX);
+  }).map(async function (name) {
+    try {
+      const cache = await caches.open(name);
+      const requests = await cache.keys();
+      const manifestRequest = requests.find(function (request) {
+        return new URL(request.url).pathname.startsWith("/offline-manifest/");
+      });
+      if (!manifestRequest) return;
+
+      const response = await fetch(new Request(manifestRequest, { cache: "reload" }));
+      if (!response.ok) return;
+      const manifest = await response.clone().json();
+      if (!manifest.ok || !manifest.details) return;
+      await cache.put(manifestRequest, response);
+    } catch (_error) {
+      // Keep the existing manifest and all saved files if refresh is unavailable.
+    }
+  }));
+}
+
 self.addEventListener("activate", function (event) {
   event.waitUntil((async function () {
     const names = await caches.keys();
@@ -96,6 +120,7 @@ self.addEventListener("activate", function (event) {
     // Per-item caches contain files explicitly saved by the user. They use a
     // separate namespace and are intentionally excluded from version cleanup.
     activeScope = await readScope();
+    await refreshSavedItemManifests();
     await self.clients.claim();
   })());
 });
