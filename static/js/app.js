@@ -762,11 +762,12 @@ document.addEventListener("DOMContentLoaded", function () {
   window.addEventListener("resize", updateFilenameExtensions);
   function bindFileRowPreviews() {
     fileRows.forEach(function (row) {
-      if (!row.dataset.previewUrl || row.dataset.previewBound === "true") return;
+      var navigationUrl = row.dataset.previewUrl || (row.dataset.kind === "event" ? row.dataset.openUrl : "");
+      if (!navigationUrl || row.dataset.previewBound === "true") return;
       row.dataset.previewBound = "true";
       row.addEventListener("click", function (event) {
         if (event.target.closest("a, button, input, label, select, textarea, .item-actions-card")) return;
-        window.location.href = row.dataset.previewUrl;
+        window.location.href = navigationUrl;
       });
     });
   }

@@ -2849,6 +2849,9 @@ button {
 .file-table tbody tr.previewable-row {
   cursor: pointer;
 }
+.file-table tbody tr[data-kind="event"][data-open-url]:not([data-open-url=""]) {
+  cursor: pointer;
+}
 .file-table tbody tr:last-child td {
   border-bottom: 0;
 }
