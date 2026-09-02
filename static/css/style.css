@@ -2940,6 +2940,12 @@ button {
   font-size: 18px;
   line-height: 1;
 }
+.bi-star::before,
+.bi-star-fill::before {
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+}
 .star-action:hover {
   color: #EFB358;
   background: transparent;
@@ -3158,6 +3164,13 @@ hr {
 
 /* Responsive font sizes for smaller screens */
 @media (max-width: 480px) {
+    .bi-star::before,
+    .bi-star-fill::before {
+        width: 14px;
+        height: 14px;
+        font-size: 14px;
+    }
+
     .workspace-header-auth {
         display: none;
     }
