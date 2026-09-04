@@ -1,12 +1,12 @@
 {% extends "base.html" %}
-{% block title %}{{ page_title }} | Library{% endblock %}
+{% block title %}{{ page_title }} | JFCM Library{% endblock %}
 {% block content %}
 {% import "_dashboard_item_macros.html" as dashboard_items with context %}
 <div class="storage-shell">
   <aside id="sidebar" class="sidebar" aria-label="Main navigation">
     <a class="brand sidebar-brand" href="{{ url_for('index') }}">
       <img src="{{ url_for('static', filename='images/JF.png') }}" alt="JFCM Pila" class="brand-logo">
-      Library
+      JFCM Library
     </a>
     {% if is_public_workspace %}
     {% if not session.get('user_id') %}
