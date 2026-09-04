@@ -1112,6 +1112,9 @@ document.addEventListener("DOMContentLoaded", function () {
       var nextTitle = resultDocument.querySelector(".workspace-title h1");
       var currentTitle = document.querySelector(".workspace-title h1");
       if (nextTitle && currentTitle) currentTitle.textContent = nextTitle.textContent;
+      var nextBreadcrumbs = resultDocument.getElementById("workspace-breadcrumbs");
+      var currentBreadcrumbs = document.getElementById("workspace-breadcrumbs");
+      if (nextBreadcrumbs && currentBreadcrumbs) currentBreadcrumbs.replaceWith(nextBreadcrumbs);
       sectionedFolderView = nextResults.querySelector("[data-sectioned-folder-view]");
       fileTableWrap = sectionedFolderView ? null : nextResults.querySelector(".table-wrap");
       noResults = nextResults.querySelector("#no-search-results");
