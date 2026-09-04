@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Sign In | JFCM Pantry{% endblock %}
+{% block title %}Sign In | Library{% endblock %}
 {% block content %}
 <main class="auth-page login-page">
   <section class="auth-card">
@@ -7,7 +7,7 @@
       <img src="{{ url_for('static', filename='images/JF.png') }}" alt="JFCM Pila" class="brand-logo">
     </a>
     <h1>Jesus First Christian Ministries - Pila</h1>
-    <p class="muted">Resources & Media Pantry</p>
+    <p class="muted">Resources & Media Library</p>
     <form method="post" class="stack-form" novalidate>
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label for="identifier">Email or Username</label>

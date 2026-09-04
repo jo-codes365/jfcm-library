@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Preview | JFCM Pantry{% endblock %}
+{% block title %}Preview | Library{% endblock %}
 {% block content %}
 {% set preview_offline_url = url_for('offline_manifest', kind='file', item_id=file.id, share_context_kind=share_context.kind, share_context_token=share_context.token) if share_context else url_for('offline_manifest', kind='file', item_id=file.id) %}
 
