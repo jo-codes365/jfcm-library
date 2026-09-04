@@ -716,7 +716,7 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   var workspaceContent = document.querySelector(".workspace-content");
-  var folderDropRows = Array.from(document.querySelectorAll(".file-workspace tr[data-folder-id]"));
+  var folderDropRows = Array.from(document.querySelectorAll(".file-workspace [data-folder-id]"));
   function setDropTarget(target) {
     if (workspaceContent) workspaceContent.classList.toggle("drag-over", target === workspaceContent);
     folderDropRows.forEach(function (row) {
@@ -736,7 +736,7 @@ document.addEventListener("DOMContentLoaded", function () {
     workspaceContent.addEventListener("dragover", function (event) {
       if (!event.dataTransfer || !event.dataTransfer.types.includes("Files")) return;
       event.preventDefault();
-      var folderRow = event.target.closest("tr[data-folder-id]");
+      var folderRow = event.target.closest("[data-folder-id]");
       setDropTarget(folderRow || workspaceContent);
       event.dataTransfer.dropEffect = "copy";
     });
@@ -746,7 +746,7 @@ document.addEventListener("DOMContentLoaded", function () {
     workspaceContent.addEventListener("drop", function (event) {
       if (!event.dataTransfer || !event.dataTransfer.types.includes("Files")) return;
       event.preventDefault();
-      var folderRow = event.target.closest("tr[data-folder-id]");
+      var folderRow = event.target.closest("[data-folder-id]");
       var folderInput = uploadForm ? uploadForm.querySelector('input[name="folder_id"]') : null;
       var destination = folderRow ? folderRow.dataset.folderId : (folderInput ? folderInput.value : "");
       setDropTarget(null);
@@ -764,8 +764,9 @@ document.addEventListener("DOMContentLoaded", function () {
   var removeFilter = document.getElementById("remove-filter");
   var resultCount = document.getElementById("result-count");
   var noResults = document.getElementById("no-search-results");
-  var fileTableWrap = document.querySelector(".file-workspace .table-wrap");
-  var fileRows = Array.from(document.querySelectorAll(".file-table tbody tr"));
+  var sectionedFolderView = document.querySelector("[data-sectioned-folder-view]");
+  var fileTableWrap = sectionedFolderView ? null : document.querySelector(".file-workspace .table-wrap");
+  var fileRows = Array.from(document.querySelectorAll(sectionedFolderView ? ".workspace-item" : ".file-table tbody tr"));
   var sortButton = document.getElementById("sort-button");
   var sortDirectionButton = document.getElementById("sort-direction-button");
   var sortMenu = document.getElementById("sort-menu");
@@ -805,8 +806,86 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
   bindFileRowPreviews();
+  function initializeFolderCarousels(root) {
+    (root || document).querySelectorAll("[data-folder-carousel]").forEach(function (carousel) {
+      if (carousel.dataset.carouselInitialized === "true") return;
+      carousel.dataset.carouselInitialized = "true";
+      var viewport = carousel.querySelector(".folder-carousel-viewport");
+      var track = carousel.querySelector(".folder-carousel-track");
+      var previous = carousel.querySelector("[data-carousel-previous]");
+      var next = carousel.querySelector("[data-carousel-next]");
+      if (!viewport || !track) return;
+      var index = 0;
+      var timer = null;
+      function visibleCards() {
+        return Array.from(track.querySelectorAll(".folder-content-card")).filter(function (card) { return !card.hidden; });
+      }
+      function cardStep() {
+        var cards = visibleCards();
+        if (!cards.length) return 0;
+        var styles = window.getComputedStyle(track);
+        return cards[0].getBoundingClientRect().width + (parseFloat(styles.gap) || 0);
+      }
+      function render() {
+        var cards = visibleCards();
+        if (!cards.length) return;
+        var step = cardStep();
+        var maxOffset = Math.max(0, track.scrollWidth - viewport.clientWidth);
+        var offset = Math.min(index * step, maxOffset);
+        track.style.transform = "translateX(-" + offset + "px)";
+      }
+      function move(direction) {
+        var cards = visibleCards();
+        if (cards.length < 2) return;
+        index = (index + direction + cards.length) % cards.length;
+        render();
+      }
+      function stop() {
+        if (timer) window.clearInterval(timer);
+        timer = null;
+      }
+      function start() {
+        stop();
+        if (visibleCards().length > 1 && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+          timer = window.setInterval(function () { move(1); }, 3000);
+        }
+      }
+      if (previous) previous.addEventListener("click", function () { move(-1); start(); });
+      if (next) next.addEventListener("click", function () { move(1); start(); });
+      carousel.addEventListener("mouseenter", stop);
+      carousel.addEventListener("mouseleave", start);
+      carousel.addEventListener("focusin", stop);
+      carousel.addEventListener("focusout", start);
+      window.addEventListener("resize", render);
+      render();
+      start();
+    });
+  }
+  initializeFolderCarousels(document);
+  var folderPreviewModal = document.getElementById("folder-preview-modal");
+  var folderPreviewFrame = document.getElementById("folder-preview-frame");
+  var closeFolderPreviewButton = document.getElementById("close-folder-preview");
+  function closeFolderPreview() {
+    if (!folderPreviewModal) return;
+    folderPreviewModal.hidden = true;
+    document.body.classList.remove("folder-preview-open");
+    if (folderPreviewFrame) folderPreviewFrame.src = "about:blank";
+  }
+  document.addEventListener("click", function (event) {
+    var previewButton = event.target.closest("[data-fullscreen-preview]");
+    if (!previewButton || !folderPreviewModal || !folderPreviewFrame) return;
+    event.preventDefault();
+    folderPreviewFrame.src = previewButton.dataset.fullscreenPreview;
+    folderPreviewModal.hidden = false;
+    document.body.classList.add("folder-preview-open");
+    if (closeFolderPreviewButton) closeFolderPreviewButton.focus();
+  });
+  if (closeFolderPreviewButton) closeFolderPreviewButton.addEventListener("click", closeFolderPreview);
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape" && folderPreviewModal && !folderPreviewModal.hidden) closeFolderPreview();
+  });
   function sortFileRows(field, direction) {
-    if (!fileTableBody) return;
+    if (!fileTableBody || sectionedFolderView) return;
     activeSortField = field;
     activeSortDirection = direction;
     sortOptions.forEach(function (option) {
@@ -1003,6 +1082,13 @@ document.addEventListener("DOMContentLoaded", function () {
     if (resultCount) resultCount.textContent = shown + " file" + (shown === 1 ? "" : "s");
     if (noResults) noResults.hidden = shown !== 0;
     if (fileTableWrap) fileTableWrap.hidden = shown === 0;
+    if (sectionedFolderView) {
+      sectionedFolderView.querySelectorAll("[data-folder-section]").forEach(function (sectionElement) {
+        var sectionItems = Array.from(sectionElement.querySelectorAll(".workspace-item"));
+        sectionElement.hidden = sectionItems.length > 0 && sectionItems.every(function (item) { return item.hidden; });
+      });
+      sectionedFolderView.hidden = shown === 0;
+    }
   }
   function reloadGlobalSearch() {
     if (!searchInput || searchInput.value.trim() === loadedSearchQuery) return;
@@ -1026,9 +1112,10 @@ document.addEventListener("DOMContentLoaded", function () {
       var nextTitle = resultDocument.querySelector(".workspace-title h1");
       var currentTitle = document.querySelector(".workspace-title h1");
       if (nextTitle && currentTitle) currentTitle.textContent = nextTitle.textContent;
-      fileTableWrap = nextResults.querySelector(".table-wrap");
+      sectionedFolderView = nextResults.querySelector("[data-sectioned-folder-view]");
+      fileTableWrap = sectionedFolderView ? null : nextResults.querySelector(".table-wrap");
       noResults = nextResults.querySelector("#no-search-results");
-      fileRows = Array.from(nextResults.querySelectorAll(".file-table tbody tr"));
+      fileRows = Array.from(nextResults.querySelectorAll(sectionedFolderView ? ".workspace-item" : ".file-table tbody tr"));
       fileTableBody = nextResults.querySelector(".file-table tbody");
       sortButton = nextResults.querySelector("#sort-button");
       sortDirectionButton = nextResults.querySelector("#sort-direction-button");
@@ -1041,6 +1128,7 @@ document.addEventListener("DOMContentLoaded", function () {
       bindSortControls();
       bindSortDirectionControl();
       sortFileRows(activeSortField, activeSortDirection);
+      initializeFolderCarousels(nextResults);
       applyFileFilters();
       window.history.replaceState(null, "", destination.toString());
     }).catch(function (error) {
@@ -1357,7 +1445,8 @@ document.addEventListener("DOMContentLoaded", function () {
       if (!offlineItemButton.hidden) syncOfflineAction(offlineItemButton);
     }
     if (copyItemLink) {
-      var isPublicRow = row.closest(".file-table")?.dataset.publicWorkspace === "true";
+      var publicWorkspaceContainer = row.closest("[data-public-workspace='true']");
+      var isPublicRow = Boolean(publicWorkspaceContainer);
       var copyUrl = row.dataset.copyUrl || (isPublicRow && row.dataset.openUrl ? new URL(row.dataset.openUrl, window.location.href).href : "");
       copyItemLink.dataset.copyUrl = copyUrl;
       copyItemLink.hidden = !copyUrl;
@@ -1373,7 +1462,7 @@ document.addEventListener("DOMContentLoaded", function () {
   }
   function submitStarUpdate(selection, starToggle) {
     if (!bulkForm || !selection || !starToggle) return;
-    var pendingRow = starToggle.closest("tr");
+    var pendingRow = starToggle.closest(".workspace-item, tr");
     var pendingRowKey = pendingRow ? pendingRow.dataset.kind + ":" + pendingRow.dataset.itemId : "";
     if (starToggle.dataset.starred === "true" && pendingRowKey && starredRemovalTimers[pendingRowKey]) {
       window.clearTimeout(starredRemovalTimers[pendingRowKey]);
@@ -1401,10 +1490,10 @@ document.addEventListener("DOMContentLoaded", function () {
       starToggle.setAttribute("title", isStarred ? "Unstar" : "Star");
       var starIcon = starToggle.querySelector("i");
       if (starIcon) starIcon.className = isStarred ? "bi bi-star-fill" : "bi bi-star";
-      if (activeItemRow === starToggle.closest("tr") && starItemButton) {
+      if (activeItemRow === starToggle.closest(".workspace-item, tr") && starItemButton) {
         starItemButton.innerHTML = isStarred ? '<i class="bi bi-star-fill"></i> Unstar' : '<i class="bi bi-star"></i> Star';
       }
-      var row = starToggle.closest("tr");
+      var row = starToggle.closest(".workspace-item, tr");
       var rowKey = row ? row.dataset.kind + ":" + row.dataset.itemId : "";
       var workspace = fileTableBody ? fileTableBody.closest(".file-table").dataset.workspace : "";
       if (rowKey && starredRemovalTimers[rowKey]) {
@@ -1426,11 +1515,11 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
   document.addEventListener("click", function (event) {
-    var button = event.target.closest(".file-table .more-actions-button");
+    var button = event.target.closest(".file-workspace .more-actions-button");
     if (button) {
       event.preventDefault();
       var targetModal = document.getElementById(button.dataset.itemActionsTarget || "");
-      var row = button.closest(".file-table tbody tr");
+      var row = button.closest(".workspace-item, .file-table tbody tr");
       if (targetModal !== itemActionsModal || !row || button.dataset.itemId !== row.dataset.itemId || button.dataset.itemKind !== row.dataset.kind) return;
       if (itemActionsModal && !itemActionsModal.hidden && activeItemRow === row && activeItemActionButton === button) {
         closeItemActions();
@@ -1571,7 +1660,7 @@ document.addEventListener("DOMContentLoaded", function () {
   document.querySelectorAll("button[data-row-action]").forEach(function (button) {
     button.addEventListener("click", function () {
       if (!bulkForm) return;
-      var row = button.closest("tr");
+      var row = button.closest(".workspace-item, tr");
       var selection = selectOnlyRow(row);
       if (!selection) return;
       function submitRowAction() {
@@ -1677,7 +1766,7 @@ document.addEventListener("DOMContentLoaded", function () {
   function openMoveModal(selections) {
     if (!moveModal || !moveDestination || !selections.length) return;
     var currentLocations = selections.map(function (input) {
-      var row = input.closest("tr");
+      var row = input.closest(".workspace-item, tr");
       return row ? (row.dataset.parentId || "root") : "";
     });
     var selectedFolderIds = selections.filter(function (input) { return input.value.indexOf("folder:") === 0; }).map(function (input) {
@@ -1763,7 +1852,8 @@ document.addEventListener("DOMContentLoaded", function () {
     return Array.from(new Set(itemSelections.filter(function (input) {
       return input.checked;
     }).map(function (input) {
-      var trigger = input.closest("tr").querySelector(".more-actions-button[data-offline-url]");
+      var itemElement = input.closest(".workspace-item, tr");
+      var trigger = itemElement ? itemElement.querySelector(".more-actions-button[data-offline-url]") : null;
       return trigger ? trigger.dataset.offlineUrl : "";
     }).filter(Boolean)));
   }
@@ -1792,7 +1882,8 @@ document.addEventListener("DOMContentLoaded", function () {
     syncBulkOfflineAction();
     if (bulkStarAction) {
       var selectedStarStates = selected.map(function (input) {
-        var starToggle = input.closest("tr").querySelector(".toggle-star");
+        var itemElement = input.closest(".workspace-item, tr");
+        var starToggle = itemElement ? itemElement.querySelector(".toggle-star") : null;
         return starToggle && starToggle.dataset.starred === "false";
       });
       var allStarred = selectedStarStates.length > 0 && selectedStarStates.every(Boolean);
@@ -1823,7 +1914,7 @@ document.addEventListener("DOMContentLoaded", function () {
     setMobileSelectMode(selectButton.getAttribute("aria-pressed") !== "true");
   });
   document.addEventListener("click", function (event) {
-    var row = event.target.closest(".file-workspace.mobile-select-mode .file-table tbody tr");
+    var row = event.target.closest(".file-workspace.mobile-select-mode .workspace-item, .file-workspace.mobile-select-mode .file-table tbody tr");
     if (!row || event.target.closest("button, input, label, select, textarea, .actions")) return;
     var selection = row.querySelector(".item-select");
     if (!selection) return;
@@ -1925,11 +2016,13 @@ document.addEventListener("DOMContentLoaded", function () {
         submitBulkAction(button);
       });
     });
-    bulkForm.querySelectorAll(".toggle-star").forEach(function (button) {
-      button.addEventListener("click", function () {
-        var selection = itemSelections.find(function (input) { return input.value === button.dataset.item; });
-        submitStarUpdate(selection, button);
-      });
+    document.addEventListener("click", function (event) {
+      var button = event.target.closest(".toggle-star");
+      if (!button || !bulkForm.contains(button)) return;
+      event.preventDefault();
+      refreshBulkSelectionElements();
+      var selection = itemSelections.find(function (input) { return input.value === button.dataset.item; });
+      submitStarUpdate(selection, button);
     });
   }
 

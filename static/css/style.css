@@ -2910,6 +2910,300 @@ button {
   background: transparent;
   text-decoration: none;
 }
+
+/* Sectioned folder workspace */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.folder-section-view {
+  display: grid;
+  gap: 34px;
+  padding: 8px 0 28px;
+}
+.folder-content-section {
+  min-width: 0;
+}
+.folder-content-section[hidden] {
+  display: none;
+}
+.folder-section-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 13px;
+}
+.folder-section-heading h2,
+.folder-section-heading p {
+  margin: 0;
+}
+.folder-section-heading h2 {
+  color: var(--ink);
+  font-size: 1.08rem;
+  line-height: 1.25;
+}
+.folder-section-eyebrow {
+  margin-bottom: 4px !important;
+  color: #6b7280;
+  font-size: .7rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.subfolder-grid,
+.presentation-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+.folder-content-card {
+  position: relative;
+  min-width: 0;
+  border: 1px solid #e1e5e2;
+  border-radius: 10px;
+  background: #fff;
+  transition: border-color .15s ease, background-color .15s ease;
+}
+.folder-content-card:hover {
+  border-color: #b9d4c3;
+  background: #fbfefc;
+}
+.folder-content-card[data-folder-id].drag-over {
+  outline: 2px dashed #21804c;
+  outline-offset: -2px;
+  background: #e6f5ec;
+}
+.folder-content-card.filter-hidden {
+  display: none !important;
+}
+.folder-content-card .card-item-select {
+  position: absolute;
+  z-index: 3;
+  top: 11px;
+  left: 11px;
+  width: 17px;
+  min-height: 17px;
+  margin: 0;
+  padding: 0;
+  accent-color: #359460;
+}
+.folder-card-main {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+  padding: 17px 72px 17px 39px;
+  color: var(--ink);
+}
+.folder-card-main img {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+}
+.folder-card-main span,
+.folder-card-main strong,
+.folder-card-main small {
+  display: block;
+  min-width: 0;
+}
+.folder-card-main strong,
+.media-card-info a {
+  overflow: hidden;
+  font-size: .9rem;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.folder-card-main small,
+.media-card-info small {
+  margin-top: 5px;
+  color: #778078;
+  font-size: .72rem;
+}
+.card-actions {
+  position: absolute;
+  z-index: 4;
+  top: 8px;
+  right: 7px;
+}
+.card-actions .actions2 {
+  display: flex;
+  align-items: center;
+}
+.folder-carousel-viewport {
+  width: 100%;
+  overflow: hidden;
+}
+.folder-carousel-track {
+  display: flex;
+  gap: 14px;
+  transition: transform .35s ease;
+}
+.folder-carousel-track .folder-content-card {
+  flex: 0 0 clamp(220px, 29vw, 310px);
+  overflow: hidden;
+}
+.folder-carousel-controls {
+  display: flex;
+  gap: 7px;
+}
+.folder-carousel-controls button,
+.folder-preview-toolbar button {
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid #d8ded9;
+  border-radius: 50%;
+  color: #315c42;
+  background: #fff;
+  cursor: pointer;
+}
+.folder-carousel-controls button:hover {
+  background: #edf7f0;
+}
+.media-card-preview {
+  position: relative;
+  display: block;
+  height: 170px;
+  overflow: hidden;
+  border-radius: 9px 9px 0 0;
+  background: #eef2ef;
+}
+.media-card-preview img,
+.media-card-preview video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.media-card-info {
+  display: grid;
+  min-width: 0;
+  padding: 12px 78px 13px 13px;
+}
+.media-card-info a {
+  color: var(--ink);
+}
+.video-play-mark {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  background: rgba(20, 45, 30, .72);
+  transform: translate(-50%, -50%);
+}
+.folder-content-card--presentation {
+  display: grid;
+  grid-template-columns: 68px minmax(0, 1fr);
+  align-items: center;
+  min-height: 142px;
+  padding: 15px;
+}
+.presentation-card-preview {
+  position: relative;
+  display: grid;
+  width: 58px;
+  height: 76px;
+  place-items: center;
+  border-radius: 7px;
+  background: #fff1ed;
+}
+.presentation-card-preview img {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+}
+.presentation-card-preview span {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  color: #a64029;
+  font-size: .58rem;
+  font-weight: 800;
+}
+.folder-content-card--presentation .media-card-info {
+  padding: 4px 56px 36px 7px;
+}
+.presentation-preview-button {
+  position: absolute;
+  right: 14px;
+  bottom: 13px;
+  min-height: 30px;
+  padding: 6px 10px;
+  font-size: .76rem;
+}
+.folder-table-section .table-wrap {
+  overflow-x: auto;
+  border: 1px solid #e1e5e2;
+  border-radius: 10px;
+  background: #fff;
+}
+.folder-table-section .file-table {
+  height: auto;
+}
+.folder-table-section .file-table tbody {
+  overflow: visible;
+}
+.folder-preview-modal {
+  position: fixed;
+  z-index: 1200;
+  inset: 0;
+  display: grid;
+  grid-template-rows: 52px minmax(0, 1fr);
+  background: #fff;
+}
+.folder-preview-modal[hidden] {
+  display: none;
+}
+.folder-preview-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px 0 20px;
+  border-bottom: 1px solid #dde3de;
+  background: #f8faf8;
+}
+.folder-preview-toolbar h2 {
+  margin: 0;
+  font-size: .95rem;
+}
+.folder-preview-modal iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #f5f6f5;
+}
+body.folder-preview-open {
+  overflow: hidden;
+}
+@media (prefers-reduced-motion: reduce) {
+  .folder-carousel-track { transition: none; }
+}
+@media (max-width: 760px) {
+  .folder-section-view { gap: 28px; }
+  .subfolder-grid,
+  .presentation-grid { grid-template-columns: 1fr; }
+  .folder-carousel-track .folder-content-card { flex-basis: min(82vw, 300px); }
+  .folder-content-card--presentation { min-height: 132px; }
+  .folder-table-section .file-table { min-width: 680px; }
+  .folder-section-heading { align-items: center; }
+  .folder-content-card .card-item-select { display: none; }
+  .file-workspace.mobile-select-mode .folder-content-card .card-item-select { display: block; }
+}
 .download-action:hover {
   color: #6FABFF;
 }
