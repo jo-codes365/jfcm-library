@@ -365,15 +365,6 @@
               {% endif %}
             {% endfor %}
             <div class="folder-section-view" data-sectioned-folder-view="true" data-public-workspace="{{ 'true' if is_public_workspace else 'false' }}">
-              {% if folder_groups.folders %}
-              <section class="folder-content-section" data-folder-section>
-                <div class="folder-section-heading"><div><h2>Subfolders</h2></div></div>
-                <div class="subfolder-grid">
-                  {% for item in items if item.kind == 'folder' %}{{ dashboard_items.item_card(item, 'folder') }}{% endfor %}
-                </div>
-              </section>
-              {% endif %}
-
               {% if folder_groups.presentations %}
               <section class="folder-content-section" data-folder-section>
                 <div class="folder-section-heading"><div><h2>Presentations</h2></div></div>
@@ -410,11 +401,11 @@
               </section>
               {% endif %}
 
-              {% if folder_groups.others %}
+              {% if folder_groups.folders or folder_groups.others %}
               <section class="folder-content-section folder-table-section" data-folder-section>
                 <div class="folder-section-heading"><div><h2>Other Files</h2></div></div>
                 <div class="table-wrap"><table class="file-table section-file-table" data-workspace="{{ section }}" data-public-workspace="{{ 'true' if is_public_workspace else 'false' }}"><thead><tr>{% if not is_public_workspace %}<th class="selection-cell"><span class="visually-hidden">Select</span></th>{% endif %}<th>Name</th><th class="column-type">Type</th><th class="column-size">Size</th><th class="column-modified">Date</th><th class="table-actions-heading">Actions</th></tr></thead><tbody>
-                  {% for item in items if item.kind == 'file' %}{% set item_extension = item.name.rsplit('.', 1)[-1]|lower if '.' in item.name else '' %}{% if file_type_key(item) not in ['powerpoint', 'image', 'video', 'pdf'] and item_extension not in ['doc', 'docx'] %}{{ dashboard_items.item_row(item) }}{% endif %}{% endfor %}
+                  {% for item in items %}{% set item_extension = item.name.rsplit('.', 1)[-1]|lower if '.' in item.name else '' %}{% if item.kind == 'folder' or (item.kind == 'file' and file_type_key(item) not in ['powerpoint', 'image', 'video', 'pdf'] and item_extension not in ['doc', 'docx']) %}{{ dashboard_items.item_row(item) }}{% endif %}{% endfor %}
                 </tbody></table></div>
               </section>
               {% endif %}
