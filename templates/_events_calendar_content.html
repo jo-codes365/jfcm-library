@@ -7,8 +7,8 @@
       <h1>{{ month_name }} {{ year }}</h1>
     </div>
     <div class="events-calendar-nav">
-      {% if calendar_previous_url %}<a class="button secondary events-calendar-month-button" href="{{ calendar_previous_url }}">Previous</a>{% endif %}
-      {% if calendar_next_url %}<a class="button secondary events-calendar-month-button" href="{{ calendar_next_url }}">Next</a>{% endif %}
+      {% if calendar_previous_url %}<a class="button secondary events-calendar-month-button" href="{{ calendar_previous_url }}" aria-label="Previous month" title="Previous month"><i class="bi bi-chevron-left" aria-hidden="true"></i></a>{% endif %}
+      {% if calendar_next_url %}<a class="button secondary events-calendar-month-button" href="{{ calendar_next_url }}" aria-label="Next month" title="Next month"><i class="bi bi-chevron-right" aria-hidden="true"></i></a>{% endif %}
     </div>
   </header>
   <section class="events-calendar-grid" aria-label="{{ month_name }} {{ year }} calendar">

@@ -484,12 +484,26 @@ document.addEventListener("DOMContentLoaded", function () {
   function setTransferItemState(item, status, progress, message) {
     item.status = status;
     item.progress = progress;
+    var isFinished = status === "success" || status === "error" || status === "cancelled";
     item.element.classList.toggle("is-success", status === "success");
     item.element.classList.toggle("is-error", status === "error");
     item.element.classList.toggle("is-cancelled", status === "cancelled");
     item.progressValue.style.width = progress + "%";
     item.progressTrack.setAttribute("aria-valuenow", String(progress));
-    item.statusElement.textContent = status === "success" ? "Done" : status === "error" ? "Error" : status === "cancelled" ? "Cancelled" : progress + "%";
+    item.progressTrack.hidden = isFinished;
+    item.statusElement.replaceChildren();
+    if (status === "success") {
+      var successIcon = document.createElement("i");
+      successIcon.className = "bi bi-check-circle";
+      successIcon.setAttribute("aria-hidden", "true");
+      item.statusElement.appendChild(successIcon);
+      item.statusElement.setAttribute("aria-label", "Uploaded");
+      item.statusElement.setAttribute("title", "Uploaded");
+    } else {
+      item.statusElement.textContent = status === "error" ? "Error" : status === "cancelled" ? "Cancelled" : progress + "%";
+      item.statusElement.removeAttribute("aria-label");
+      item.statusElement.removeAttribute("title");
+    }
     item.element.title = message || item.file.name;
   }
 
@@ -618,6 +632,8 @@ document.addEventListener("DOMContentLoaded", function () {
     await new Promise(function (resolve) { window.requestAnimationFrame(resolve); });
     for (var index = 0; index < validItems.length; index += 1) {
       if (uploadWasCancelled) break;
+      var remaining = validItems.length - index;
+      uploadTransferTitle.textContent = "Uploading " + remaining + " item" + (remaining === 1 ? "" : "s");
       uploadTransferStatus.textContent = "Uploading...";
       var uploaded = await uploadTransferItem(validItems[index], context);
       if (uploaded) refreshWorkspaceContents();
@@ -630,6 +646,8 @@ document.addEventListener("DOMContentLoaded", function () {
     } else {
       uploadTransferStatus.textContent = "Upload complete";
     }
+    var uploadedCount = items.filter(function (item) { return item.status === "success"; }).length;
+    uploadTransferTitle.textContent = "Uploaded " + uploadedCount + " item" + (uploadedCount === 1 ? "" : "s");
     uploadIsRunning = false;
     activeUploadRequest = null;
     uploadTransferCancel.hidden = true;
@@ -1071,21 +1089,43 @@ document.addEventListener("DOMContentLoaded", function () {
     event.preventDefault();
     event.stopPropagation();
     var presentation = fullscreenButton.closest(".folder-content-card--presentation");
-    if (!presentation) return;
-    if (document.fullscreenElement === presentation) {
+    var canvas = presentation ? presentation.querySelector("[data-powerpoint-canvas]") : null;
+    if (!canvas) return;
+    if (document.fullscreenElement === canvas) {
       document.exitFullscreen();
       return;
     }
-    presentation.requestFullscreen().catch(function () {
+    canvas.requestFullscreen().catch(function () {
       showToast("Fullscreen is unavailable in this browser.", "error");
     });
   });
   document.addEventListener("fullscreenchange", function () {
     document.querySelectorAll("[data-presentation-fullscreen]").forEach(function (button) {
-      var isFullscreen = document.fullscreenElement === button.closest(".folder-content-card--presentation");
+      var presentation = button.closest(".folder-content-card--presentation");
+      var canvas = presentation ? presentation.querySelector("[data-powerpoint-canvas]") : null;
+      var isFullscreen = document.fullscreenElement === canvas;
       button.setAttribute("aria-label", isFullscreen ? "Exit presentation fullscreen" : "View presentation in fullscreen");
       button.setAttribute("title", isFullscreen ? "Exit fullscreen" : "Fullscreen");
     });
+  });
+  document.addEventListener("keydown", function (event) {
+    var fullscreenCanvas = document.fullscreenElement;
+    if (!fullscreenCanvas || !fullscreenCanvas.matches("[data-powerpoint-canvas]")) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      document.exitFullscreen();
+      return;
+    }
+    var preview = fullscreenCanvas.closest("[data-inline-powerpoint-preview]");
+    if (!preview) return;
+    var navigationButton = event.key === "ArrowLeft"
+      ? preview.querySelector("[data-powerpoint-previous]")
+      : event.key === "ArrowRight"
+        ? preview.querySelector("[data-powerpoint-next]")
+        : null;
+    if (!navigationButton) return;
+    event.preventDefault();
+    if (!navigationButton.disabled) navigationButton.click();
   });
   function sortFileRows(field, direction) {
     if (!fileTableBody || sectionedFolderView) return;
@@ -1771,6 +1811,15 @@ document.addEventListener("DOMContentLoaded", function () {
     var card = itemActionsModal.querySelector(".item-actions-card");
     if (card && !card.contains(event.target)) closeItemActions();
   });
+  document.addEventListener("contextmenu", function (event) {
+    var row = event.target.closest(".file-workspace .workspace-item, .file-workspace .file-table tbody tr");
+    if (!row || !row.dataset.itemId || !row.dataset.kind) return;
+    var button = row.querySelector(".more-actions-button[data-item-actions-target='item-actions-modal']");
+    if (button && (button.dataset.itemId !== row.dataset.itemId || button.dataset.itemKind !== row.dataset.kind)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    openItemActions(row, button || row);
+  });
   document.getElementById("close-item-actions")?.addEventListener("click", closeItemActions);
   if (itemActionsModal) itemActionsModal.addEventListener("click", function (event) {
     if (event.target === itemActionsModal) closeItemActions();
@@ -1992,6 +2041,16 @@ document.addEventListener("DOMContentLoaded", function () {
   var bulkForm = document.getElementById("bulk-form");
   var bulkToolbar = document.getElementById("bulk-toolbar");
   var workspaceTitle = document.querySelector(".workspace-title");
+  function anchorBulkToolbar() {
+    if (!bulkToolbar || !workspaceTitle) return;
+    var titleBounds = workspaceTitle.getBoundingClientRect();
+    var titleOffset = window.matchMedia("(max-width: 480px)").matches ? 0 : 30;
+    bulkToolbar.style.setProperty("--bulk-toolbar-top", titleBounds.top + window.scrollY + titleOffset + "px");
+    bulkToolbar.style.setProperty("--bulk-toolbar-left", titleBounds.left + window.scrollX + "px");
+    bulkToolbar.style.setProperty("--bulk-toolbar-width", titleBounds.width + "px");
+  }
+  anchorBulkToolbar();
+  window.addEventListener("resize", anchorBulkToolbar);
   var clearBulkSelection = document.getElementById("clear-bulk-selection");
   var bulkActionsButton = document.getElementById("bulk-actions-button");
   var bulkActionsModal = document.getElementById("bulk-actions-modal");

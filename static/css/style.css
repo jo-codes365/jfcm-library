@@ -2324,11 +2324,11 @@ table tbody tr:nth-child(even) {
   position: fixed;
   z-index: 1150;
   right: 22px;
-  bottom: 22px;
+  bottom: 0;
   width: min(380px, calc(100vw - 32px));
   overflow: hidden;
   border: 1px solid #e1e5e2;
-  border-radius: 14px;
+  border-radius: 14px 14px 0 0;
   background: #fff;
   box-shadow: 0 14px 36px rgba(31, 55, 40, .18);
 }
@@ -2445,6 +2445,9 @@ table tbody tr:nth-child(even) {
 .upload-transfer-item.is-success .upload-transfer-item-status {
   color: var(--primary-dark);
 }
+.upload-transfer-item.is-success .upload-transfer-item-status i {
+  font-size: .95rem;
+}
 .upload-transfer-item.is-error .upload-transfer-item-status,
 .upload-transfer-item.is-cancelled .upload-transfer-item-status {
   color: #a62121;
@@ -2465,7 +2468,7 @@ table tbody tr:nth-child(even) {
 @media (max-width: 480px) {
   .upload-transfer-panel {
     right: 12px;
-    bottom: 12px;
+    bottom: 0;
     width: calc(100vw - 24px);
   }
 }
@@ -2589,12 +2592,13 @@ button {
 }
 .bulk-toolbar {
   display: none;
-  position: absolute;
-  top: 30px;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  z-index: 2;
+  position: fixed;
+  top: var(--bulk-toolbar-top, 0);
+  right: auto;
+  bottom: auto;
+  left: var(--bulk-toolbar-left, 0);
+  z-index: 12;
+  width: var(--bulk-toolbar-width, auto);
   min-height: 50px;
   align-items: center;
   flex-wrap: wrap;
@@ -3470,24 +3474,17 @@ button {
 .folder-table-section .file-table tbody td {
   border-bottom: 0;
 }
-.folder-content-card--presentation:fullscreen {
-  display: flex;
-  width: 100%;
-  height: 100%;
-  padding: 18px;
-  flex-direction: column;
-  background: #fff;
+.inline-presentation-stage canvas:fullscreen {
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: none;
+  max-height: none;
+  object-fit: contain;
+  background: #000;
+  visibility: visible;
 }
-.folder-content-card--presentation:fullscreen .inline-presentation-preview {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-}
-.folder-content-card--presentation:fullscreen .inline-presentation-stage {
-  min-height: 0;
-  aspect-ratio: auto;
-  flex: 1;
+.inline-presentation-stage canvas:fullscreen::backdrop {
+  background: #000;
 }
 @media (prefers-reduced-motion: reduce) {
   .folder-carousel-track { transition: none; }
@@ -3800,8 +3797,6 @@ hr {
     }
 
     .workspace-title .bulk-toolbar {
-        top: 0;
-        bottom: auto;
         min-height: 48px;
         padding: 6px 10px;
     }

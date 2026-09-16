@@ -173,6 +173,7 @@
                 My Files
                 {% endif %}
               </h1>
+              {% if not current_folder %}
               <div class="vr"> </div>
               <div class="filter-controls">
                 <div class="filter-wrap">
@@ -218,6 +219,7 @@
                   <button id="clear-filters-button" class="button secondary filter-button" type="button" title="Clear all filters" hidden><i class="bi bi-x-lg"></i> Clear filters</button>
                 </div>
               </div>
+              {% endif %}
             </div>
           </div>
           <div class="workspace-title-actions">
@@ -342,7 +344,9 @@
               {% if date_workspace_events %}
               <div class="date-workspace-events">
                 {% for event in date_workspace_events %}
-                <article class="date-workspace-event-card">
+                <article class="date-workspace-event-card workspace-item" data-kind="event" data-item-id="{{ event.id }}" data-item-name="{{ event.name }}" data-item-display-name="{{ display_name(event.name) }}" data-item-type="{{ event_type_label(event.event_type) }}" data-item-size="{{ display_item_size('event', 0) }}" data-item-location="Events" data-item-modified="{{ format_datetime(event.event_date) }}" data-item-date-label="Scheduled for" data-open-url="{{ url_for('dashboard', section='events', event=event.id) }}" data-download-url="{{ url_for('download_event', event_id=event.id) }}" data-copy-url="{{ url_for('public_event', share_token=event.share_token, _external=true) if event.share_token else '' }}" data-offline-url="{{ url_for('offline_manifest', kind='event', item_id=event.id) }}" data-item-icon="{{ event.event_type }}">
+                  <input class="item-select" type="checkbox" name="items" value="event:{{ event.id }}" aria-label="Select {{ display_name(event.name) }}" hidden>
+                  <button class="toggle-star" type="button" data-starred="{{ 'false' if event.is_starred else 'true' }}" hidden></button>
                   <div>
                     <h3><img class="event-icon-inline" src="{{ url_for('static', filename='images/' ~ event_icon_file(event.event_type)) }}" alt=""> {{ display_name(event.name) }}</h3>
                     <p>Scheduled for {{ event.event_date.strftime('%b ') }}{{ event.event_date.day }}{{ event.event_date.strftime(', %Y') }}</p>
