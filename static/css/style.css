@@ -3258,9 +3258,12 @@ button {
 }
 .folder-image-grid .folder-content-card--image {
   overflow: hidden;
+  padding: 4px;
+  background: #f8faf9;
 }
 .folder-content-card--image > .card-item-select {
-  top: 29px;
+  top: 33px;
+  left: 15px;
   height: 17px;
   transform: translateY(-50%);
 }
