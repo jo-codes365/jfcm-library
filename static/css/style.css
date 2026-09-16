@@ -3245,7 +3245,7 @@ button {
 .media-card-preview {
   position: relative;
   display: block;
-  height: 164px;
+  height: 160px;
   overflow: hidden;
   border-radius: 9px 9px 0 0;
   background: #eef2ef;
@@ -3355,7 +3355,7 @@ button {
   min-width: 0;
   gap: 4px;
 }
-.inline-presentation-title a {
+.inline-presentation-title span {
   overflow: hidden;
   color: var(--ink);
   font-size: .9rem;

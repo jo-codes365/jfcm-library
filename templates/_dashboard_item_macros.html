@@ -69,7 +69,7 @@ data-kind="{{ item.kind }}" data-item-id="{{ item.id }}" data-parent-id="{{ item
     {% set content_url = url_for('preview_content', file_id=item.id) if item.kind == 'file' else '' %}
   {% endif %}
   {% set copy_url = url_for('token_preview', share_token=item.share_token, _external=true) if item.kind == 'file' and item.share_token else url_for('public_event', share_token=current_event.share_token, folder=item.id, _external=true) if item.kind == 'folder' and current_event and current_event.share_token else url_for('public_folder', share_token=item.share_token, _external=true) if item.kind == 'folder' and item.share_token else '' %}
-<article class="workspace-item folder-content-card folder-content-card--{{ card_kind }}{% if item.kind == 'file' %} previewable-row{% endif %}"{% if item.kind == 'file' %} data-preview-url="{{ open_url }}"{% endif %} {{ item_attributes(item, open_url, download_url, copy_url) }}>
+<article class="workspace-item folder-content-card folder-content-card--{{ card_kind }}{% if item.kind == 'file' and card_kind != 'presentation' %} previewable-row{% endif %}"{% if item.kind == 'file' and card_kind != 'presentation' %} data-preview-url="{{ open_url }}"{% endif %} {{ item_attributes(item, open_url, download_url, copy_url) }}>
   {% if not is_public_workspace and card_kind != 'presentation' %}<input class="item-select card-item-select" type="checkbox" name="items" value="{{ item.kind }}:{{ item.id }}" aria-label="Select {{ display_name(item.name) }}">{% endif %}
   {% if card_kind == 'folder' %}
   <a class="folder-card-main" href="{{ open_url }}"><img src="{{ url_for('static', filename='images/Folder.png') }}" alt=""><span><strong>{{ display_name(item.name) }}</strong><small>{{ display_item_size(item.kind, item.size) }}</small></span></a>
@@ -87,7 +87,7 @@ data-kind="{{ item.kind }}" data-item-id="{{ item.id }}" data-parent-id="{{ item
   {% else %}
   <header class="inline-presentation-header">
     <div class="inline-presentation-title">
-      <a href="{{ open_url }}" title="{{ display_name(item.name) }}">{{ display_name(item.name) }}</a>
+      <span title="{{ display_name(item.name) }}">{{ display_name(item.name) }}</span>
     </div>
     <div class="inline-presentation-actions">
       <button class="button secondary inline-presentation-open" type="button" data-presentation-fullscreen aria-label="View {{ display_name(item.name) }} in fullscreen" title="Fullscreen"><i class="bi bi-arrows-fullscreen" aria-hidden="true"></i></button>
