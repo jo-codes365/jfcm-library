@@ -4,9 +4,9 @@
 <main class="auth-page login-page">
   <section class="auth-card">
     <a class="brand" href="{{ url_for('index') }}">
-      <img src="{{ url_for('static', filename='images/JF.png') }}" alt="JFCM Pila" class="brand-logo">
+      <img src="{{ url_for('static', filename='images/JF.png') }}" alt="JFCM" class="brand-logo">
     </a>
-    <h1>Jesus First Christian Ministries - Pila</h1>
+    <h1>Jesus First Christian Ministries</h1>
     <p class="muted">JFCM Library</p>
     <form method="post" class="stack-form" novalidate>
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
