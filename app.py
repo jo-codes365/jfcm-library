@@ -36,6 +36,8 @@ def env_int(name, default):
 
 
 MAX_FILE_SIZE_MB = env_int("MAX_FILE_SIZE_MB", 50)
+MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
+UPLOAD_REQUEST_OVERHEAD_BYTES = 1024 * 1024
 TRASH_RETENTION_DAYS = 30
 SESSION_INACTIVITY_DAYS = 7
 SESSION_LAST_ACTIVITY_KEY = "last_activity_at"
@@ -48,7 +50,7 @@ UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
 app = Flask(__name__)
 app.config.update(
     SECRET_KEY=os.getenv("SECRET_KEY", "change-this-before-production"),
-    MAX_CONTENT_LENGTH=MAX_FILE_SIZE_MB * 1024 * 1024,
+    MAX_CONTENT_LENGTH=MAX_FILE_SIZE_BYTES + UPLOAD_REQUEST_OVERHEAD_BYTES,
     UPLOAD_FOLDER=str(UPLOAD_FOLDER),
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
@@ -1527,11 +1529,20 @@ def upload():
                 cursor = get_db().cursor()
                 try:
                     cursor.execute(
-                        "INSERT INTO folders (user_id, parent_id, event_id, name, share_token) VALUES (%s, %s, %s, %s, %s)",
-                        (upload_owner_id, parent_id, event_id, safe_part, secrets.token_urlsafe(32)),
+                        "SELECT id FROM folders WHERE user_id = %s AND parent_id <=> %s AND event_id <=> %s "
+                        "AND name = %s AND is_deleted = FALSE ORDER BY id LIMIT 1",
+                        (upload_owner_id, parent_id, event_id, safe_part),
                     )
-                    folder_cache[cache_key] = cursor.lastrowid
-                    get_db().commit()
+                    existing_folder = cursor.fetchone()
+                    if existing_folder:
+                        folder_cache[cache_key] = existing_folder[0]
+                    else:
+                        cursor.execute(
+                            "INSERT INTO folders (user_id, parent_id, event_id, name, share_token) VALUES (%s, %s, %s, %s, %s)",
+                            (upload_owner_id, parent_id, event_id, safe_part, secrets.token_urlsafe(32)),
+                        )
+                        folder_cache[cache_key] = cursor.lastrowid
+                        get_db().commit()
                 except MySQLError:
                     get_db().rollback()
                     raise
@@ -1556,7 +1567,7 @@ def upload():
         if file_size <= 0:
             results.append({"name": original_name, "status": "error", "message": "Empty files cannot be uploaded."})
             continue
-        if file_size > app.config["MAX_CONTENT_LENGTH"]:
+        if file_size > MAX_FILE_SIZE_BYTES:
             results.append({"name": original_name, "status": "error", "message": f"Files must be {MAX_FILE_SIZE_MB} MB or smaller."})
             continue
 
@@ -2627,6 +2638,12 @@ def public_event(share_token):
 
 @app.errorhandler(RequestEntityTooLarge)
 def too_large(_error):
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return jsonify({
+            "ok": False,
+            "uploaded": 0,
+            "results": [{"name": "", "status": "error", "message": f"Files must be {MAX_FILE_SIZE_MB} MB or smaller."}],
+        }), 413
     flash(f"Files must be {MAX_FILE_SIZE_MB} MB or smaller.", "error")
     return redirect(url_for("dashboard") if "user_id" in session else url_for("login"))
 

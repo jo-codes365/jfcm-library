@@ -380,9 +380,16 @@ document.addEventListener("DOMContentLoaded", function () {
   var folderInputPicker = document.getElementById("folder-input");
   var dropZone = document.getElementById("drop-zone");
   var uploadForm = document.getElementById("upload-form");
-  var selectedFile = document.getElementById("selected-file");
-  var uploadError = document.getElementById("upload-error");
-  var uploadStatus = document.getElementById("upload-status");
+  var uploadTransferPanel = document.getElementById("upload-transfer-panel");
+  var uploadTransferTitle = document.getElementById("upload-transfer-title");
+  var uploadTransferToggle = document.getElementById("upload-transfer-toggle");
+  var uploadTransferClose = document.getElementById("upload-transfer-close");
+  var uploadTransferStatus = document.getElementById("upload-transfer-status");
+  var uploadTransferList = document.getElementById("upload-transfer-list");
+  var uploadTransferCancel = document.getElementById("upload-transfer-cancel");
+  var activeUploadRequest = null;
+  var uploadIsRunning = false;
+  var uploadWasCancelled = false;
   var maxSizeMb = uploadForm ? Number(uploadForm.dataset.maxSizeMb) : 50;
   var maxSize = maxSizeMb * 1024 * 1024;
   function currentWorkspaceUrl() {
@@ -398,10 +405,6 @@ document.addEventListener("DOMContentLoaded", function () {
   function syncWorkspaceState() {
     var workspaceUrl = currentWorkspaceUrl();
     window.history.replaceState(null, "", workspaceUrl.toString());
-  }
-  function refreshCurrentWorkspace() {
-    var workspaceUrl = currentWorkspaceUrl();
-    window.location.assign(workspaceUrl.toString());
   }
   function addWorkspaceReturnTarget(form) {
     if (!form) return;
@@ -446,12 +449,6 @@ document.addEventListener("DOMContentLoaded", function () {
   }
   document.querySelectorAll("form[action='/events']").forEach(initCustomEventDateInput);
 
-  function formatSize(size) {
-    if (size < 1024) return size + " B";
-    if (size < 1024 * 1024) return (size / 1024).toFixed(1) + " KB";
-    return (size / 1024 / 1024).toFixed(2) + " MB";
-  }
-
   function escapeHtml(value) {
     return String(value)
       .replace(/&/g, "&amp;")
@@ -461,11 +458,6 @@ document.addEventListener("DOMContentLoaded", function () {
       .replace(/'/g, "&#039;");
   }
 
-  function truncateFilename(name, maxLength) {
-    if (name.length <= maxLength) return name;
-    return name.substring(0, maxLength - 3) + "...";
-  }
-
   function validateFile(file) {
     if (!file) { return { valid: false, message: "Select a file to upload." }; }
     if (file.size === 0) { return { valid: false, message: "Empty files cannot be uploaded." }; }
@@ -473,18 +465,195 @@ document.addEventListener("DOMContentLoaded", function () {
     return { valid: true, message: "" };
   }
 
-  function setUploadResults(results) {
-    if (!uploadStatus) return;
-    if (!results || !results.length) {
-      uploadStatus.textContent = "Upload complete.";
+  function uploadIconUrl(file) {
+    if (!uploadTransferPanel) return "";
+    var extension = file.name.indexOf(".") === -1 ? "" : file.name.split(".").pop().toLowerCase();
+    var mimeType = (file.type || "").toLowerCase();
+    var iconKey = "file";
+    if (mimeType.indexOf("image/") === 0 || ["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg", "ico", "tif", "tiff"].includes(extension)) iconKey = "image";
+    else if (mimeType === "application/pdf" || extension === "pdf") iconKey = "pdf";
+    else if (["doc", "docx", "odt", "rtf", "txt", "md"].includes(extension)) iconKey = "document";
+    else if (["xls", "xlsx", "ods", "csv", "tsv"].includes(extension)) iconKey = "spreadsheet";
+    else if (["ppt", "pptx", "pps", "ppsx", "odp"].includes(extension)) iconKey = "powerpoint";
+    else if (mimeType.indexOf("video/") === 0 || ["mp4", "webm", "mov", "avi", "mkv", "m4v"].includes(extension)) iconKey = "video";
+    else if (mimeType.indexOf("audio/") === 0 || ["mp3", "wav", "ogg", "m4a", "aac", "flac"].includes(extension)) iconKey = "audio";
+    else if (["zip", "rar", "7z", "tar", "gz", "tgz"].includes(extension)) iconKey = "zip";
+    return uploadTransferPanel.dataset["icon" + iconKey.charAt(0).toUpperCase() + iconKey.slice(1)] || uploadTransferPanel.dataset.iconFile;
+  }
+
+  function setTransferItemState(item, status, progress, message) {
+    item.status = status;
+    item.progress = progress;
+    item.element.classList.toggle("is-success", status === "success");
+    item.element.classList.toggle("is-error", status === "error");
+    item.element.classList.toggle("is-cancelled", status === "cancelled");
+    item.progressValue.style.width = progress + "%";
+    item.progressTrack.setAttribute("aria-valuenow", String(progress));
+    item.statusElement.textContent = status === "success" ? "Done" : status === "error" ? "Error" : status === "cancelled" ? "Cancelled" : progress + "%";
+    item.element.title = message || item.file.name;
+  }
+
+  function createTransferItem(file) {
+    var item = { file: file, status: "pending", progress: 0 };
+    var row = document.createElement("div");
+    row.className = "upload-transfer-item";
+    var icon = document.createElement("img");
+    icon.className = "upload-transfer-icon";
+    icon.src = uploadIconUrl(file);
+    icon.alt = "";
+    var info = document.createElement("div");
+    info.className = "upload-transfer-file-info";
+    var name = document.createElement("span");
+    name.className = "upload-transfer-filename";
+    name.textContent = file.name || "File";
+    name.title = file.name || "File";
+    var progressTrack = document.createElement("div");
+    progressTrack.className = "upload-transfer-progress";
+    progressTrack.setAttribute("role", "progressbar");
+    progressTrack.setAttribute("aria-label", "Upload progress for " + (file.name || "file"));
+    progressTrack.setAttribute("aria-valuemin", "0");
+    progressTrack.setAttribute("aria-valuemax", "100");
+    progressTrack.setAttribute("aria-valuenow", "0");
+    var progressValue = document.createElement("div");
+    progressValue.className = "upload-transfer-progress-value";
+    progressTrack.appendChild(progressValue);
+    info.appendChild(name);
+    info.appendChild(progressTrack);
+    var status = document.createElement("span");
+    status.className = "upload-transfer-item-status";
+    status.textContent = "0%";
+    row.appendChild(icon);
+    row.appendChild(info);
+    row.appendChild(status);
+    item.element = row;
+    item.progressTrack = progressTrack;
+    item.progressValue = progressValue;
+    item.statusElement = status;
+    return item;
+  }
+
+  function uploadContext(destinationOverride) {
+    var context = { fields: {}, csrfToken: "" };
+    ["csrf_token", "folder_id", "event_id", "share_context_kind", "share_context_token"].forEach(function (name) {
+      var input = uploadForm.querySelector('input[name="' + name + '"]');
+      if (input && input.value) context.fields[name] = input.value;
+    });
+    if (destinationOverride !== undefined && destinationOverride !== null) context.fields.folder_id = String(destinationOverride);
+    context.csrfToken = context.fields.csrf_token || "";
+    context.returnTo = currentWorkspaceUrl().toString();
+    return context;
+  }
+
+  function uploadTransferItem(item, context) {
+    return new Promise(function (resolve) {
+      var payload = new FormData();
+      payload.append("file", item.file, item.file.name);
+      payload.append("folder_path", item.file.webkitRelativePath || "");
+      Object.keys(context.fields).forEach(function (name) { payload.append(name, context.fields[name]); });
+      payload.append("return_to", context.returnTo);
+      var request = new XMLHttpRequest();
+      var settled = false;
+      activeUploadRequest = request;
+      function finish(success, message, cancelled) {
+        if (settled) return;
+        settled = true;
+        if (activeUploadRequest === request) activeUploadRequest = null;
+        setTransferItemState(item, cancelled ? "cancelled" : success ? "success" : "error", success ? 100 : item.progress, message);
+        resolve(success);
+      }
+      request.open("POST", uploadForm.action, true);
+      request.setRequestHeader("X-Requested-With", "XMLHttpRequest");
+      if (context.csrfToken) request.setRequestHeader("X-CSRFToken", context.csrfToken);
+      request.upload.addEventListener("progress", function (event) {
+        if (!event.lengthComputable) return;
+        setTransferItemState(item, "uploading", Math.min(99, Math.round(event.loaded / event.total * 100)));
+      });
+      request.addEventListener("load", function () {
+        var response = null;
+        try { response = JSON.parse(request.responseText); } catch (_error) {}
+        var result = response && response.results && response.results[0];
+        var success = request.status >= 200 && request.status < 300 && result && result.status === "success";
+        finish(success, result && result.message ? result.message : success ? "File uploaded successfully." : "Upload failed. Please try again.", false);
+      });
+      request.addEventListener("error", function () { finish(false, "Upload failed. Please try again.", false); });
+      request.addEventListener("abort", function () { finish(false, "Upload cancelled.", true); });
+      request.send(payload);
+    });
+  }
+
+  async function startUploads(files, destinationOverride) {
+    if (!uploadForm || !uploadTransferPanel || !uploadTransferList || !files.length) return;
+    if (uploadIsRunning) {
+      uploadTransferPanel.hidden = false;
+      showToast("An upload is already in progress.", "error");
       return;
     }
-
-    uploadStatus.innerHTML = results.map(function (result) {
-      var label = result.status === "success" ? "Uploaded" : "Error";
-      return escapeHtml(label + ": " + result.name + " - " + result.message);
-    }).join("<br>");
+    uploadIsRunning = true;
+    uploadWasCancelled = false;
+    uploadTransferPanel.hidden = false;
+    uploadTransferPanel.setAttribute("aria-busy", "true");
+    uploadTransferPanel.classList.remove("is-collapsed");
+    uploadTransferToggle.setAttribute("aria-expanded", "true");
+    uploadTransferToggle.setAttribute("aria-label", "Collapse uploads");
+    uploadTransferToggle.setAttribute("title", "Collapse");
+    uploadTransferToggle.querySelector("i").className = "bi bi-chevron-down";
+    uploadTransferTitle.textContent = "Uploading " + files.length + " item" + (files.length === 1 ? "" : "s");
+    uploadTransferStatus.textContent = "Starting upload...";
+    uploadTransferCancel.hidden = false;
+    uploadTransferCancel.disabled = false;
+    uploadTransferCancel.parentElement.hidden = false;
+    uploadTransferList.replaceChildren();
+    var items = files.map(function (file) {
+      var item = createTransferItem(file);
+      uploadTransferList.appendChild(item.element);
+      var validation = validateFile(file);
+      item.valid = validation.valid;
+      if (!validation.valid) setTransferItemState(item, "error", 100, validation.message);
+      return item;
+    });
+    var context = uploadContext(destinationOverride);
+    if (fileInput) fileInput.value = "";
+    if (folderInputPicker) folderInputPicker.value = "";
+    var validItems = items.filter(function (item) { return item.valid; });
+    await new Promise(function (resolve) { window.requestAnimationFrame(resolve); });
+    for (var index = 0; index < validItems.length; index += 1) {
+      if (uploadWasCancelled) break;
+      uploadTransferStatus.textContent = "Uploading...";
+      var uploaded = await uploadTransferItem(validItems[index], context);
+      if (uploaded) refreshWorkspaceContents();
+    }
+    if (uploadWasCancelled) {
+      validItems.forEach(function (item) {
+        if (item.status === "pending") setTransferItemState(item, "cancelled", 0, "Upload cancelled.");
+      });
+      uploadTransferStatus.textContent = "Upload cancelled";
+    } else {
+      uploadTransferStatus.textContent = "Upload complete";
+    }
+    uploadIsRunning = false;
+    activeUploadRequest = null;
+    uploadTransferCancel.hidden = true;
+    uploadTransferCancel.parentElement.hidden = true;
+    uploadTransferPanel.setAttribute("aria-busy", "false");
   }
+
+  if (uploadTransferToggle && uploadTransferPanel) uploadTransferToggle.addEventListener("click", function () {
+    var collapsed = uploadTransferPanel.classList.toggle("is-collapsed");
+    uploadTransferToggle.setAttribute("aria-expanded", String(!collapsed));
+    uploadTransferToggle.setAttribute("aria-label", collapsed ? "Expand uploads" : "Collapse uploads");
+    uploadTransferToggle.setAttribute("title", collapsed ? "Expand" : "Collapse");
+    uploadTransferToggle.querySelector("i").className = "bi " + (collapsed ? "bi-chevron-up" : "bi-chevron-down");
+  });
+  if (uploadTransferClose && uploadTransferPanel) uploadTransferClose.addEventListener("click", function () {
+    uploadTransferPanel.hidden = true;
+  });
+  if (uploadTransferCancel) uploadTransferCancel.addEventListener("click", function () {
+    if (!uploadIsRunning) return;
+    uploadWasCancelled = true;
+    uploadTransferStatus.textContent = "Cancelling...";
+    uploadTransferCancel.disabled = true;
+    if (activeUploadRequest) activeUploadRequest.abort();
+  });
 
   if (fileInput && uploadForm) {
     uploadForm.addEventListener("submit", function (event) {
@@ -494,86 +663,14 @@ document.addEventListener("DOMContentLoaded", function () {
         showCustomAlert("Select a file to upload.", "Upload files");
         return;
       }
-
-      var validFiles = [];
-      var invalidFiles = [];
-      selectedFiles.forEach(function (file) {
-        var result = validateFile(file);
-        if (result.valid) {
-          validFiles.push(file);
-        } else {
-          invalidFiles.push({ name: file.name || "File", status: "error", message: result.message });
-        }
-      });
-
-      if (!validFiles.length) {
-        showCustomAlert(invalidFiles.map(function (item) {
-          return escapeHtml("Error: " + item.name + " - " + item.message);
-        }).join("\n"));
-        return;
-      }
-
-      if (uploadStatus) uploadStatus.textContent = "Uploading " + validFiles.length + " file(s)...";
-
-      var csrfToken = uploadForm.querySelector('input[name="csrf_token"]');
-      var folderInput = uploadForm.querySelector('input[name="folder_id"]');
-      var payload = new FormData();
-      validFiles.forEach(function (file) {
-        payload.append("file", file, file.name);
-        payload.append("folder_path", file.webkitRelativePath || "");
-      });
-      if (csrfToken && csrfToken.value) {
-        payload.append("csrf_token", csrfToken.value);
-      }
-      if (folderInput) {
-        payload.append("folder_id", folderInput.value);
-      }
-      ["event_id", "share_context_kind", "share_context_token"].forEach(function (name) {
-        var input = uploadForm.querySelector('input[name="' + name + '"]');
-        if (input && input.value) payload.append(name, input.value);
-      });
-      payload.append("return_to", currentWorkspaceUrl().toString());
-
-      fetch(uploadForm.action, {
-        method: "POST",
-        body: payload,
-        headers: {
-          "X-Requested-With": "XMLHttpRequest",
-          "X-CSRFToken": csrfToken && csrfToken.value ? csrfToken.value : ""
-        }
-      }).then(function (response) {
-        return response.text().then(function (text) {
-          try {
-            return JSON.parse(text);
-          } catch (error) {
-            return null;
-          }
-        });
-      }).then(function (result) {
-        if (result && result.results) {
-          setUploadResults(result.results.concat(invalidFiles));
-          if (result.ok) {
-            window.setTimeout(refreshCurrentWorkspace, 900);
-          }
-        } else {
-          refreshCurrentWorkspace();
-        }
-      }).catch(function () {
-        showCustomAlert("Upload failed. Please try again.", "Upload failed");
-      });
+      startUploads(selectedFiles);
     });
     fileInput.addEventListener("change", function () {
       if (fileInput.files && fileInput.files.length) uploadForm.requestSubmit();
     });
-    if (folderInputPicker) {
-      folderInputPicker.addEventListener("change", function () {
-        if (!folderInputPicker.files || !folderInputPicker.files.length) return;
-        var transfer = new DataTransfer();
-        Array.from(folderInputPicker.files).forEach(function (file) { transfer.items.add(file); });
-        fileInput.files = transfer.files;
-        uploadForm.requestSubmit();
-      });
-    }
+    if (folderInputPicker) folderInputPicker.addEventListener("change", function () {
+      if (folderInputPicker.files && folderInputPicker.files.length) startUploads(Array.from(folderInputPicker.files));
+    });
   }
 
   var modal = document.getElementById("delete-modal");
@@ -724,13 +821,8 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
   function uploadDroppedFiles(files, folderId) {
-    if (!fileInput || !uploadForm || !files.length) return;
-    var transfer = new DataTransfer();
-    files.forEach(function (file) { transfer.items.add(file); });
-    fileInput.files = transfer.files;
-    var folderInput = uploadForm.querySelector('input[name="folder_id"]');
-    if (folderInput) folderInput.value = folderId || "";
-    uploadForm.requestSubmit();
+    if (!uploadForm || !files.length) return;
+    startUploads(files, folderId || "");
   }
   if (workspaceContent && workspaceContent.dataset.dropEnabled === "true") {
     workspaceContent.addEventListener("dragover", function (event) {
@@ -815,10 +907,26 @@ document.addEventListener("DOMContentLoaded", function () {
       var previous = carousel.querySelector("[data-carousel-previous]");
       var next = carousel.querySelector("[data-carousel-next]");
       if (!viewport || !track) return;
+      var isGridCarousel = carousel.dataset.carouselGrid === "true";
       var index = 0;
       var timer = null;
       function visibleCards() {
         return Array.from(track.querySelectorAll(".folder-content-card")).filter(function (card) { return !card.hidden; });
+      }
+      function gridRows() {
+        var rows = [];
+        var trackTop = track.getBoundingClientRect().top;
+        visibleCards().forEach(function (card) {
+          var cardBounds = card.getBoundingClientRect();
+          var top = Math.round(cardBounds.top - trackTop);
+          var row = rows.find(function (candidate) { return candidate.top === top; });
+          if (!row) {
+            row = { top: top, height: 0 };
+            rows.push(row);
+          }
+          row.height = Math.max(row.height, cardBounds.height);
+        });
+        return rows;
       }
       function cardStep() {
         var cards = visibleCards();
@@ -829,15 +937,23 @@ document.addEventListener("DOMContentLoaded", function () {
       function render() {
         var cards = visibleCards();
         if (!cards.length) return;
+        if (isGridCarousel) {
+          var rows = gridRows();
+          if (!rows.length) return;
+          index = Math.min(index, rows.length - 1);
+          viewport.style.height = rows[index].height + "px";
+          track.style.transform = "translateY(-" + rows[index].top + "px)";
+          return;
+        }
         var step = cardStep();
         var maxOffset = Math.max(0, track.scrollWidth - viewport.clientWidth);
         var offset = Math.min(index * step, maxOffset);
         track.style.transform = "translateX(-" + offset + "px)";
       }
       function move(direction) {
-        var cards = visibleCards();
-        if (cards.length < 2) return;
-        index = (index + direction + cards.length) % cards.length;
+        var itemCount = isGridCarousel ? gridRows().length : visibleCards().length;
+        if (itemCount < 2) return;
+        index = (index + direction + itemCount) % itemCount;
         render();
       }
       function stop() {
@@ -846,7 +962,8 @@ document.addEventListener("DOMContentLoaded", function () {
       }
       function start() {
         stop();
-        if (visibleCards().length > 1 && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        var itemCount = isGridCarousel ? gridRows().length : visibleCards().length;
+        if (itemCount > 1 && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
           timer = window.setInterval(function () { move(1); }, 3000);
         }
       }
@@ -856,12 +973,98 @@ document.addEventListener("DOMContentLoaded", function () {
       carousel.addEventListener("mouseleave", start);
       carousel.addEventListener("focusin", stop);
       carousel.addEventListener("focusout", start);
+      carousel.addEventListener("folder-carousel-refresh", function () { index = 0; render(); start(); });
       window.addEventListener("resize", render);
       render();
       start();
     });
   }
   initializeFolderCarousels(document);
+  var powerpointViewerLoader = null;
+  function loadPresentationScript(source, ready) {
+    if (ready()) return Promise.resolve();
+    return new Promise(function (resolve, reject) {
+      var absoluteSource = new URL(source, document.baseURI).href;
+      var script = Array.from(document.scripts).find(function (candidate) { return candidate.src === absoluteSource; });
+      if (!script) {
+        script = document.createElement("script");
+        script.src = source;
+        script.async = true;
+        document.head.appendChild(script);
+      }
+      script.addEventListener("load", function () { ready() ? resolve() : reject(new Error("Presentation dependency unavailable")); }, { once: true });
+      script.addEventListener("error", function () { reject(new Error("Presentation dependency failed to load")); }, { once: true });
+    });
+  }
+  function ensurePowerpointViewer() {
+    if (window.PptxViewJS) return Promise.resolve();
+    if (!powerpointViewerLoader) {
+      powerpointViewerLoader = loadPresentationScript("https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js", function () { return Boolean(window.JSZip); })
+        .then(function () { return loadPresentationScript("https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js", function () { return Boolean(window.Chart); }); })
+        .then(function () { return loadPresentationScript("https://cdn.jsdelivr.net/npm/pptxviewjs/dist/PptxViewJS.min.js", function () { return Boolean(window.PptxViewJS); }); });
+    }
+    return powerpointViewerLoader;
+  }
+  function initializeInlinePowerpointPreviews(root) {
+    (root || document).querySelectorAll("[data-inline-powerpoint-preview]").forEach(function (preview) {
+      if (preview.dataset.powerpointInitialized === "true") return;
+      preview.dataset.powerpointInitialized = "true";
+      var canvas = preview.querySelector("[data-powerpoint-canvas]");
+      var message = preview.querySelector("[data-powerpoint-message]");
+      var status = preview.querySelector("[data-powerpoint-status]");
+      var previous = preview.querySelector("[data-powerpoint-previous]");
+      var next = preview.querySelector("[data-powerpoint-next]");
+      var stage = preview.querySelector(".inline-presentation-stage");
+      if (!canvas || !message || !status || !previous || !next) return;
+      if (stage) stage.addEventListener("click", function (event) { event.stopPropagation(); });
+      function unavailable(text) {
+        canvas.classList.remove("is-ready");
+        message.hidden = false;
+        message.textContent = text;
+        status.textContent = "Preview unavailable";
+        previous.disabled = true;
+        next.disabled = true;
+      }
+      ensurePowerpointViewer().then(function () {
+        return fetch(preview.dataset.contentUrl);
+      }).then(function (response) {
+        if (!response.ok) throw new Error("Presentation request failed");
+        return response.blob();
+      }).then(async function (blob) {
+        var presentationFile = new File([blob], preview.dataset.filename || "presentation." + preview.dataset.extension, { type: blob.type });
+        var viewer = new window.PptxViewJS.PPTXViewer({ canvas: canvas });
+        await viewer.loadFile(presentationFile);
+        await viewer.render();
+        canvas.classList.add("is-ready");
+        message.hidden = true;
+        function updateControls() {
+          var current = viewer.getCurrentSlideIndex() + 1;
+          var total = viewer.getSlideCount();
+          status.textContent = "Page " + current + " of " + total;
+          previous.disabled = current <= 1;
+          next.disabled = current >= total;
+        }
+        previous.addEventListener("click", async function () {
+          previous.disabled = true;
+          next.disabled = true;
+          await viewer.previousSlide();
+          updateControls();
+        });
+        next.addEventListener("click", async function () {
+          previous.disabled = true;
+          next.disabled = true;
+          await viewer.nextSlide();
+          updateControls();
+        });
+        updateControls();
+      }).catch(function () {
+        unavailable(preview.dataset.extension === "ppt"
+          ? "Inline preview is unavailable for this legacy .ppt file. Use Open / Preview or download the original file."
+          : "This presentation could not be rendered. Use Open / Preview or download the original file.");
+      });
+    });
+  }
+  initializeInlinePowerpointPreviews(document);
   var folderPreviewModal = document.getElementById("folder-preview-modal");
   var folderPreviewFrame = document.getElementById("folder-preview-frame");
   var closeFolderPreviewButton = document.getElementById("close-folder-preview");
@@ -1088,7 +1291,67 @@ document.addEventListener("DOMContentLoaded", function () {
         sectionElement.hidden = sectionItems.length > 0 && sectionItems.every(function (item) { return item.hidden; });
       });
       sectionedFolderView.hidden = shown === 0;
+      sectionedFolderView.querySelectorAll("[data-folder-carousel]").forEach(function (carousel) {
+        carousel.dispatchEvent(new Event("folder-carousel-refresh"));
+      });
     }
+  }
+  var workspaceRefreshPromise = null;
+  var workspaceRefreshQueued = false;
+  function applyWorkspaceResultsHtml(html) {
+    var resultDocument = new DOMParser().parseFromString(html, "text/html");
+    var nextResults = resultDocument.getElementById("file-results");
+    var currentResults = document.getElementById("file-results");
+    if (!nextResults || !currentResults) throw new Error("Workspace results unavailable");
+    currentResults.replaceWith(nextResults);
+    var nextTitle = resultDocument.querySelector(".workspace-title h1");
+    var currentTitle = document.querySelector(".workspace-title h1");
+    if (nextTitle && currentTitle) currentTitle.textContent = nextTitle.textContent;
+    var nextBreadcrumbs = resultDocument.getElementById("workspace-breadcrumbs");
+    var currentBreadcrumbs = document.getElementById("workspace-breadcrumbs");
+    if (nextBreadcrumbs && currentBreadcrumbs) currentBreadcrumbs.replaceWith(nextBreadcrumbs);
+    sectionedFolderView = nextResults.querySelector("[data-sectioned-folder-view]");
+    fileTableWrap = sectionedFolderView ? null : nextResults.querySelector(".table-wrap");
+    noResults = nextResults.querySelector("#no-search-results");
+    fileRows = Array.from(nextResults.querySelectorAll(sectionedFolderView ? ".workspace-item" : ".file-table tbody tr"));
+    fileTableBody = nextResults.querySelector(".file-table tbody");
+    sortButton = nextResults.querySelector("#sort-button");
+    sortDirectionButton = nextResults.querySelector("#sort-direction-button");
+    sortMenu = nextResults.querySelector("#sort-menu");
+    sortOptions = sortMenu ? Array.from(sortMenu.querySelectorAll("button[data-sort-field]")) : [];
+    folderDropRows = Array.from(nextResults.querySelectorAll("[data-folder-id]"));
+    refreshBulkSelectionElements();
+    setMobileSelectMode(false);
+    bindFileRowPreviews();
+    bindSortControls();
+    bindSortDirectionControl();
+    sortFileRows(activeSortField, activeSortDirection);
+    initializeFolderCarousels(nextResults);
+    initializeInlinePowerpointPreviews(nextResults);
+    applyFileFilters();
+    updateFilenameExtensions();
+  }
+  function refreshWorkspaceContents() {
+    if (workspaceRefreshPromise) {
+      workspaceRefreshQueued = true;
+      return workspaceRefreshPromise;
+    }
+    var destination = currentWorkspaceUrl();
+    workspaceRefreshPromise = fetch(destination.toString(), {
+      headers: { "X-Requested-With": "XMLHttpRequest" }
+    }).then(function (response) {
+      if (!response.ok) throw new Error("Workspace refresh failed");
+      return response.text();
+    }).then(applyWorkspaceResultsHtml).catch(function () {
+      showToast("The upload finished, but the workspace could not be refreshed.", "error");
+    }).finally(function () {
+      workspaceRefreshPromise = null;
+      if (workspaceRefreshQueued) {
+        workspaceRefreshQueued = false;
+        refreshWorkspaceContents();
+      }
+    });
+    return workspaceRefreshPromise;
   }
   function reloadGlobalSearch() {
     if (!searchInput || searchInput.value.trim() === loadedSearchQuery) return;
@@ -1104,35 +1367,8 @@ document.addEventListener("DOMContentLoaded", function () {
       return response.text();
     }).then(function (html) {
       if (searchInput.value !== requestedSearchQuery) return;
-      var resultDocument = new DOMParser().parseFromString(html, "text/html");
-      var nextResults = resultDocument.getElementById("file-results");
-      var currentResults = document.getElementById("file-results");
-      if (!nextResults || !currentResults) throw new Error("Search results unavailable");
-      currentResults.replaceWith(nextResults);
-      var nextTitle = resultDocument.querySelector(".workspace-title h1");
-      var currentTitle = document.querySelector(".workspace-title h1");
-      if (nextTitle && currentTitle) currentTitle.textContent = nextTitle.textContent;
-      var nextBreadcrumbs = resultDocument.getElementById("workspace-breadcrumbs");
-      var currentBreadcrumbs = document.getElementById("workspace-breadcrumbs");
-      if (nextBreadcrumbs && currentBreadcrumbs) currentBreadcrumbs.replaceWith(nextBreadcrumbs);
-      sectionedFolderView = nextResults.querySelector("[data-sectioned-folder-view]");
-      fileTableWrap = sectionedFolderView ? null : nextResults.querySelector(".table-wrap");
-      noResults = nextResults.querySelector("#no-search-results");
-      fileRows = Array.from(nextResults.querySelectorAll(sectionedFolderView ? ".workspace-item" : ".file-table tbody tr"));
-      fileTableBody = nextResults.querySelector(".file-table tbody");
-      sortButton = nextResults.querySelector("#sort-button");
-      sortDirectionButton = nextResults.querySelector("#sort-direction-button");
-      sortMenu = nextResults.querySelector("#sort-menu");
-      sortOptions = sortMenu ? Array.from(sortMenu.querySelectorAll("button[data-sort-field]")) : [];
-      refreshBulkSelectionElements();
-      setMobileSelectMode(false);
+      applyWorkspaceResultsHtml(html);
       loadedSearchQuery = requestedSearchQuery;
-      bindFileRowPreviews();
-      bindSortControls();
-      bindSortDirectionControl();
-      sortFileRows(activeSortField, activeSortDirection);
-      initializeFolderCarousels(nextResults);
-      applyFileFilters();
       window.history.replaceState(null, "", destination.toString());
     }).catch(function (error) {
       if (error.name !== "AbortError") showToast("Search results could not be refreshed.", "error");

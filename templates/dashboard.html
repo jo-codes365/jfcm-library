@@ -241,6 +241,24 @@
           <input id="file-input" name="file" type="file" multiple>
           <input id="folder-input" name="folder" type="file" webkitdirectory directory multiple>
         </form>{% endif %}
+        {% if not is_public_workspace %}
+        <aside id="upload-transfer-panel" class="upload-transfer-panel" hidden aria-live="polite" aria-labelledby="upload-transfer-title" data-icon-file="{{ url_for('static', filename='images/File.png') }}" data-icon-image="{{ url_for('static', filename='images/Image.png') }}" data-icon-pdf="{{ url_for('static', filename='images/PDF.png') }}" data-icon-document="{{ url_for('static', filename='images/Word.png') }}" data-icon-spreadsheet="{{ url_for('static', filename='images/Spreadsheet.png') }}" data-icon-powerpoint="{{ url_for('static', filename='images/PPT.png') }}" data-icon-video="{{ url_for('static', filename='images/Video.png') }}" data-icon-audio="{{ url_for('static', filename='images/Audio.png') }}" data-icon-zip="{{ url_for('static', filename='images/Zip.png') }}">
+          <header class="upload-transfer-header">
+            <h2 id="upload-transfer-title">Uploading 0 items</h2>
+            <div class="upload-transfer-controls">
+              <button id="upload-transfer-toggle" type="button" aria-label="Collapse uploads" title="Collapse" aria-expanded="true"><i class="bi bi-chevron-down" aria-hidden="true"></i></button>
+              <button id="upload-transfer-close" type="button" aria-label="Close uploads" title="Close"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+            </div>
+          </header>
+          <div id="upload-transfer-content" class="upload-transfer-content">
+            <p id="upload-transfer-status" class="upload-transfer-status">Starting upload...</p>
+            <div id="upload-transfer-list" class="upload-transfer-list"></div>
+            <footer class="upload-transfer-footer">
+              <button id="upload-transfer-cancel" class="button secondary" type="button">Cancel</button>
+            </footer>
+          </div>
+        </aside>
+        {% endif %}
         <div id="folder-modal" class="modal" hidden aria-modal="true" role="dialog" aria-labelledby="folder-title">
           <section class="modal-card">
             <h2 id="folder-title">New folder</h2>
@@ -375,9 +393,9 @@
               {% endif %}
 
               {% if folder_groups.images %}
-              <section class="folder-content-section folder-carousel-section" data-folder-section data-folder-carousel>
-                <div class="folder-section-heading"><div><h2>Images</h2></div><div class="folder-carousel-controls"><button type="button" data-carousel-previous aria-label="Previous image"><i class="bi bi-chevron-left"></i></button><button type="button" data-carousel-next aria-label="Next image"><i class="bi bi-chevron-right"></i></button></div></div>
-                <div class="folder-carousel-viewport"><div class="folder-carousel-track">
+              <section class="folder-content-section folder-carousel-section folder-image-section" data-folder-section data-folder-carousel data-carousel-grid="true">
+                <div class="folder-section-heading"><div><h2>Images</h2></div><div class="folder-carousel-controls"><button type="button" data-carousel-previous aria-label="Previous image row"><i class="bi bi-chevron-left"></i></button><button type="button" data-carousel-next aria-label="Next image row"><i class="bi bi-chevron-right"></i></button></div></div>
+                <div class="folder-carousel-viewport"><div class="folder-carousel-track folder-image-grid">
                   {% for item in items if item.kind == 'file' and file_type_key(item) == 'image' %}{{ dashboard_items.item_card(item, 'image') }}{% endfor %}
                 </div></div>
               </section>
@@ -420,10 +438,11 @@
                     {% if is_global_search or section in ['recent', 'starred'] %}<th class="item-location column-location">Location</th>{% endif %}
                     {% if section != 'recent' %}<th class="column-type">Type</th>{% endif %}
                     <th class="column-size">Size</th>
-                    <th class="column-modified">{{ 'Date Deleted' if is_trash else 'Last Modified' if section == 'recent' else 'Date' }}</th>
+                    <th class="column-modified">{{ 'Date Deleted' if is_trash else 'Last Accessed' if section == 'recent' else 'Date' }}</th>
                     {% if is_public_workspace %}
                     <th>Actions</th>
                     {% else %}<th>
+                      {% if section != 'recent' %}
                       <div class="sort-wrap">
                         <button id="sort-button" class="sort-button" type="button" aria-expanded="false" aria-controls="sort-menu">Sort by</button>
                         <button id="sort-direction-button" class="sort-direction-button" type="button" aria-label="Sort ascending" title="Sort ascending"><i class="bi bi-sort-up" aria-hidden="true"></i></button>
@@ -433,6 +452,7 @@
                           <button type="button" data-sort-field="size"><i class="bi bi-sd-card" aria-hidden="true"></i> Size</button>
                         </div>
                       </div>
+                      {% endif %}
                     </th>{% endif %}
                   </tr>
                 </thead>
@@ -499,7 +519,7 @@
                     </td>
                     {% endif %}
                     <td class="column-size">{{ display_item_size(item.kind, item.size if item.kind in ['folder', 'event'] else item.file_size) }}</td>
-                    <td class="column-modified">{{ format_datetime(item.date) }}{% if is_trash and item.deleted_at %}<div class="trash-retention-note">{{ trash_days_remaining(item.deleted_at) }}</div>{% endif %}</td>
+                    <td class="column-modified">{{ format_datetime(item.accessed_at) if section == 'recent' and item.accessed_at else '—' if section == 'recent' else format_datetime(item.date) }}{% if is_trash and item.deleted_at %}<div class="trash-retention-note">{{ trash_days_remaining(item.deleted_at) }}</div>{% endif %}</td>
                     {% if is_public_workspace %}
                     <td class="actions">
                       <div class="actions2">
