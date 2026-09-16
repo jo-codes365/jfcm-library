@@ -3130,7 +3130,7 @@ button {
 .folder-image-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 14px;
+  gap: 20px 14px;
 }
 .folder-content-card {
   position: relative;

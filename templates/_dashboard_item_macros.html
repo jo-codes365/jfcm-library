@@ -76,7 +76,9 @@ data-kind="{{ item.kind }}" data-item-id="{{ item.id }}" data-parent-id="{{ item
   {% elif card_kind == 'image' %}
   <header class="image-card-header">
     <div class="image-card-title"><a href="{{ open_url }}" title="{{ display_name(item.name) }}">{{ display_name(item.name) }}</a></div>
-    <div class="image-card-actions actions">{{ action_buttons(item, download_url, offline_url) }}</div>
+    <div class="image-card-actions actions">
+      <button class="row-action more-actions-button" type="button" data-item-actions-target="item-actions-modal" data-item-id="{{ item.id }}" data-item-kind="{{ item.kind }}" data-offline-url="{{ offline_url }}" aria-label="More actions for {{ display_name(item.name) }}" title="More actions" aria-haspopup="menu" aria-controls="item-actions-modal" aria-expanded="false"><i class="bi bi-three-dots-vertical" aria-hidden="true"></i></button>
+    </div>
   </header>
   <a class="media-card-preview" href="{{ open_url }}"><img src="{{ content_url }}" alt="Preview of {{ display_name(item.name) }}" loading="lazy"></a>
   {% elif card_kind == 'video' %}
