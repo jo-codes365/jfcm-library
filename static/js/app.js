@@ -1065,27 +1065,27 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
   initializeInlinePowerpointPreviews(document);
-  var folderPreviewModal = document.getElementById("folder-preview-modal");
-  var folderPreviewFrame = document.getElementById("folder-preview-frame");
-  var closeFolderPreviewButton = document.getElementById("close-folder-preview");
-  function closeFolderPreview() {
-    if (!folderPreviewModal) return;
-    folderPreviewModal.hidden = true;
-    document.body.classList.remove("folder-preview-open");
-    if (folderPreviewFrame) folderPreviewFrame.src = "about:blank";
-  }
   document.addEventListener("click", function (event) {
-    var previewButton = event.target.closest("[data-fullscreen-preview]");
-    if (!previewButton || !folderPreviewModal || !folderPreviewFrame) return;
+    var fullscreenButton = event.target.closest("[data-presentation-fullscreen]");
+    if (!fullscreenButton) return;
     event.preventDefault();
-    folderPreviewFrame.src = previewButton.dataset.fullscreenPreview;
-    folderPreviewModal.hidden = false;
-    document.body.classList.add("folder-preview-open");
-    if (closeFolderPreviewButton) closeFolderPreviewButton.focus();
+    event.stopPropagation();
+    var presentation = fullscreenButton.closest(".folder-content-card--presentation");
+    if (!presentation) return;
+    if (document.fullscreenElement === presentation) {
+      document.exitFullscreen();
+      return;
+    }
+    presentation.requestFullscreen().catch(function () {
+      showToast("Fullscreen is unavailable in this browser.", "error");
+    });
   });
-  if (closeFolderPreviewButton) closeFolderPreviewButton.addEventListener("click", closeFolderPreview);
-  document.addEventListener("keydown", function (event) {
-    if (event.key === "Escape" && folderPreviewModal && !folderPreviewModal.hidden) closeFolderPreview();
+  document.addEventListener("fullscreenchange", function () {
+    document.querySelectorAll("[data-presentation-fullscreen]").forEach(function (button) {
+      var isFullscreen = document.fullscreenElement === button.closest(".folder-content-card--presentation");
+      button.setAttribute("aria-label", isFullscreen ? "Exit presentation fullscreen" : "View presentation in fullscreen");
+      button.setAttribute("title", isFullscreen ? "Exit fullscreen" : "Fullscreen");
+    });
   });
   function sortFileRows(field, direction) {
     if (!fileTableBody || sectionedFolderView) return;
