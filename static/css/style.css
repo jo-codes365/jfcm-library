@@ -3255,6 +3255,11 @@ button {
 .folder-image-grid .folder-content-card--image {
   overflow: hidden;
 }
+.folder-content-card--image > .card-item-select {
+  top: 29px;
+  height: 17px;
+  transform: translateY(-50%);
+}
 .image-card-header {
   display: flex;
   min-width: 0;
