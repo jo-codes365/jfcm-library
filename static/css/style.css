@@ -3132,9 +3132,6 @@ button {
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 14px;
 }
-.folder-carousel-track.folder-image-grid {
-  display: grid;
-}
 .folder-content-card {
   position: relative;
   min-width: 0;
@@ -3340,9 +3337,6 @@ button {
   justify-content: space-between;
   gap: 18px;
   padding: 0 0 12px;
-}
-.folder-content-card--presentation .card-item-select + .inline-presentation-header {
-  padding-left: 32px;
 }
 .inline-presentation-title {
   display: grid;
