@@ -3759,8 +3759,8 @@ button {
   place-items: center;
   font-size: .9rem;
 }
-.button .secondary .inline-presentation-open .rds {
-  border-radius: 7px !important;
+.inline-presentation-open[data-presentation-fullscreen] {
+  border-radius: 6px !important;
 }
 .inline-presentation-preview {
   width: 100%;
