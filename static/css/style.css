@@ -3941,8 +3941,11 @@ body.presentation-fullscreen-fallback-active {
     min-height: 18px;
     transform: none;
   }
+  .file-workspace.mobile-select-mode .folder-content-card--image > .card-item-select {
+    top: 23px;
+  }
   .folder-content-card--image .card-item-select + .image-card-header {
-    padding-left: 0;
+    padding-left: 8px;
   }
   .file-workspace.mobile-select-mode .folder-content-card--image .card-item-select + .image-card-header {
     padding-left: 38px;
@@ -4395,7 +4398,7 @@ hr {
 
     .mobile-select-button[aria-pressed="true"] {
         color: var(--primary-dark);
-        background: var(--primary);
+        background: #eaf7ee;
     }
 
     .mobile-list-controls + .table-wrap {
