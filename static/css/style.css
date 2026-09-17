@@ -2334,8 +2334,8 @@ table tbody tr:nth-child(even) {
   outline-offset: 2px;
 }
 .event-icon-inline {
-  width: 18px;
-  height: 18px;
+  width: 28px;
+  height: 28px;
   margin-right: 6px;
   vertical-align: text-bottom;
   object-fit: contain;
