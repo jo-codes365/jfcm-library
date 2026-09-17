@@ -77,13 +77,19 @@
       <button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="Open navigation" aria-controls="sidebar" aria-expanded="false">
         <i class="bi bi-list" aria-hidden="true"></i>
       </button>
-      <label class="global-search" for="file-search">
-        <span class="search-label" aria-hidden="true">
-          <i class="bi bi-search search-icon-default"></i>
-        </span>
-        <input id="file-search" type="search" value="{{ search_query }}" placeholder="Search files and folders..." aria-label="Search all files and folders" autocomplete="off">
-        <button id="global-search-clear" class="global-search-clear" type="button" aria-label="Clear search" title="Clear search" hidden><i class="bi bi-x-lg" aria-hidden="true"></i></button>
-      </label>
+      <div class="global-search-wrap" data-search-suggestions-url="{{ url_for('search_suggestions') if not is_public_workspace and not is_shared_workspace else '' }}">
+        <label class="global-search" for="file-search">
+          <span class="search-label" aria-hidden="true">
+            <i class="bi bi-search search-icon-default"></i>
+          </span>
+          <input id="file-search" type="search" value="{{ search_query }}" placeholder="Search files and folders..." aria-label="Search all files and folders" aria-autocomplete="list" aria-controls="global-search-suggestions" aria-expanded="false" autocomplete="off">
+          <button id="global-search-clear" class="global-search-clear" type="button" aria-label="Clear search" title="Clear search" hidden><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+        </label>
+        <div id="global-search-suggestions" class="global-search-suggestions" role="listbox" aria-label="Search suggestions" hidden>
+          <div class="global-search-suggestion-list"></div>
+          <a class="global-search-show-all" href="{{ url_for('dashboard') }}" hidden>Show All</a>
+        </div>
+      </div>
       {% if is_public_workspace %}
       <nav class="workspace-header-auth" aria-label="Account actions">
         {% if session.get('user_id') %}

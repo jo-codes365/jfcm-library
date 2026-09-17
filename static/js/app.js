@@ -1,4 +1,52 @@
 document.addEventListener("DOMContentLoaded", function () {
+  var reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+  var temporaryHideTimers = new WeakMap();
+  function temporaryIsOpen(element) {
+    return Boolean(element && !element.hidden && !element.classList.contains("is-closing"));
+  }
+  function showTemporary(element) {
+    if (!element) return;
+    var wasVisible = !element.hidden && element.classList.contains("is-visible") && !element.classList.contains("is-closing");
+    var pendingTimer = temporaryHideTimers.get(element);
+    if (pendingTimer) window.clearTimeout(pendingTimer);
+    temporaryHideTimers.delete(element);
+    element.hidden = false;
+    element.classList.remove("is-closing");
+    if (wasVisible) return;
+    if (reducedMotionQuery.matches) {
+      element.classList.add("is-visible");
+      return;
+    }
+    element.classList.remove("is-visible");
+    void element.offsetWidth;
+    window.requestAnimationFrame(function () {
+      if (!element.hidden && !element.classList.contains("is-closing")) element.classList.add("is-visible");
+    });
+  }
+  function hideTemporary(element, afterHidden) {
+    if (!element) return;
+    var pendingTimer = temporaryHideTimers.get(element);
+    if (pendingTimer) window.clearTimeout(pendingTimer);
+    var finish = function () {
+      if (!element.classList.contains("is-closing")) return;
+      element.hidden = true;
+      element.classList.remove("is-visible", "is-closing");
+      temporaryHideTimers.delete(element);
+      if (afterHidden) afterHidden();
+    };
+    if (element.hidden) {
+      element.classList.remove("is-visible", "is-closing");
+      if (afterHidden) afterHidden();
+      return;
+    }
+    element.classList.remove("is-visible");
+    element.classList.add("is-closing");
+    if (reducedMotionQuery.matches) {
+      finish();
+      return;
+    }
+    temporaryHideTimers.set(element, window.setTimeout(finish, 180));
+  }
   var sidebar = document.getElementById("sidebar");
   var sidebarToggle = document.getElementById("sidebar-toggle");
   var sidebarBackdrop = document.getElementById("sidebar-backdrop");
@@ -283,7 +331,7 @@ document.addEventListener("DOMContentLoaded", function () {
   var customDialogAction = document.getElementById("custom-dialog-action");
   var customDialogCallback = null;
   function closeCustomDialog() {
-    if (customDialogModal) customDialogModal.hidden = true;
+    hideTemporary(customDialogModal);
     customDialogCallback = null;
   }
   function showCustomAlert(message, title) {
@@ -294,7 +342,7 @@ document.addEventListener("DOMContentLoaded", function () {
     customDialogAction.textContent = "OK";
     customDialogAction.className = "button primary";
     customDialogCallback = null;
-    customDialogModal.hidden = false;
+    showTemporary(customDialogModal);
     customDialogAction.focus();
   }
   function showCustomConfirm(message, actionLabel, isDanger, onConfirm) {
@@ -305,7 +353,7 @@ document.addEventListener("DOMContentLoaded", function () {
     customDialogAction.textContent = actionLabel;
     customDialogAction.className = "button " + (isDanger ? "danger" : "primary");
     customDialogCallback = onConfirm;
-    customDialogModal.hidden = false;
+    showTemporary(customDialogModal);
     customDialogAction.focus();
   }
   if (customDialogCancel) customDialogCancel.addEventListener("click", closeCustomDialog);
@@ -338,14 +386,14 @@ document.addEventListener("DOMContentLoaded", function () {
   if (logoutLink && logoutModal) {
     logoutLink.addEventListener("click", function (event) {
       event.preventDefault();
-      logoutModal.hidden = false;
+      showTemporary(logoutModal);
       if (cancelLogout) cancelLogout.focus();
     });
     if (cancelLogout) {
-      cancelLogout.addEventListener("click", function () { logoutModal.hidden = true; });
+      cancelLogout.addEventListener("click", function () { hideTemporary(logoutModal); });
     }
     logoutModal.addEventListener("click", function (event) {
-      if (event.target === logoutModal) logoutModal.hidden = true;
+      if (event.target === logoutModal) hideTemporary(logoutModal);
     });
     if (confirmLogout) {
       confirmLogout.addEventListener("click", async function (event) {
@@ -598,13 +646,13 @@ document.addEventListener("DOMContentLoaded", function () {
   async function startUploads(files, destinationOverride) {
     if (!uploadForm || !uploadTransferPanel || !uploadTransferList || !files.length) return;
     if (uploadIsRunning) {
-      uploadTransferPanel.hidden = false;
+      showTemporary(uploadTransferPanel);
       showToast("An upload is already in progress.", "error");
       return;
     }
     uploadIsRunning = true;
     uploadWasCancelled = false;
-    uploadTransferPanel.hidden = false;
+    showTemporary(uploadTransferPanel);
     uploadTransferPanel.setAttribute("aria-busy", "true");
     uploadTransferPanel.classList.remove("is-collapsed");
     uploadTransferToggle.setAttribute("aria-expanded", "true");
@@ -663,7 +711,7 @@ document.addEventListener("DOMContentLoaded", function () {
     uploadTransferToggle.querySelector("i").className = "bi " + (collapsed ? "bi-chevron-up" : "bi-chevron-down");
   });
   if (uploadTransferClose && uploadTransferPanel) uploadTransferClose.addEventListener("click", function () {
-    uploadTransferPanel.hidden = true;
+    hideTemporary(uploadTransferPanel);
   });
   if (uploadTransferCancel) uploadTransferCancel.addEventListener("click", function () {
     if (!uploadIsRunning) return;
@@ -697,9 +745,9 @@ document.addEventListener("DOMContentLoaded", function () {
     if (!deleteForm || !modal) return;
     deleteForm.action = "/delete/" + fileId;
     document.getElementById("delete-file-name").textContent = fileName;
-    modal.hidden = false;
+    showTemporary(modal);
   }
-  function closeModal() { if (modal) modal.hidden = true; }
+  function closeModal() { hideTemporary(modal); }
   document.querySelectorAll(".delete-trigger").forEach(function (button) {
     button.addEventListener("click", function () { openDeleteModal(button.dataset.fileId, button.dataset.fileName); });
   });
@@ -720,23 +768,26 @@ document.addEventListener("DOMContentLoaded", function () {
   if (previewMoreButton && previewMoreMenu) {
     previewMoreButton.addEventListener("click", function (event) {
       event.stopPropagation();
-      previewMoreMenu.hidden = !previewMoreMenu.hidden;
-      previewMoreButton.setAttribute("aria-expanded", String(!previewMoreMenu.hidden));
+      var shouldOpen = !temporaryIsOpen(previewMoreMenu);
+      if (shouldOpen) showTemporary(previewMoreMenu);
+      else hideTemporary(previewMoreMenu);
+      previewMoreButton.setAttribute("aria-expanded", String(shouldOpen));
     });
     document.addEventListener("click", function (event) {
       if (!previewMoreMenu.hidden && !previewMoreMenu.contains(event.target) && !previewMoreButton.contains(event.target)) {
-        previewMoreMenu.hidden = true;
+        hideTemporary(previewMoreMenu);
         previewMoreButton.setAttribute("aria-expanded", "false");
       }
     });
   }
   function closePreviewMoreMenu() {
-    if (previewMoreMenu) previewMoreMenu.hidden = true;
+    hideTemporary(previewMoreMenu);
     if (previewMoreButton) previewMoreButton.setAttribute("aria-expanded", "false");
   }
   function togglePreviewModal(id, visible) {
     var modalElement = document.getElementById(id);
-    if (modalElement) modalElement.hidden = !visible;
+    if (visible) showTemporary(modalElement);
+    else hideTemporary(modalElement);
     closePreviewMoreMenu();
   }
   if (previewRenameButton) previewRenameButton.addEventListener("click", function () {
@@ -797,7 +848,7 @@ document.addEventListener("DOMContentLoaded", function () {
   var newMenu = document.getElementById("new-menu");
   function openFilePicker() {
     if (!fileInput) return;
-    if (newMenu) newMenu.hidden = true;
+    hideTemporary(newMenu);
     if (newMenuButton) newMenuButton.setAttribute("aria-expanded", "false");
     fileInput.click();
   }
@@ -805,25 +856,27 @@ document.addEventListener("DOMContentLoaded", function () {
   if (uploadMenuAction) uploadMenuAction.addEventListener("click", openFilePicker);
   if (uploadFolderMenuAction && folderInputPicker) {
     uploadFolderMenuAction.addEventListener("click", function () {
-      if (newMenu) newMenu.hidden = true;
+      hideTemporary(newMenu);
       if (newMenuButton) newMenuButton.setAttribute("aria-expanded", "false");
       folderInputPicker.click();
     });
   }
   if (newMenuButton && newMenu) {
     newMenuButton.addEventListener("click", function () {
-      newMenu.hidden = !newMenu.hidden;
-      newMenuButton.setAttribute("aria-expanded", String(!newMenu.hidden));
+      var shouldOpen = !temporaryIsOpen(newMenu);
+      if (shouldOpen) showTemporary(newMenu);
+      else hideTemporary(newMenu);
+      newMenuButton.setAttribute("aria-expanded", String(shouldOpen));
     });
     document.addEventListener("click", function (event) {
       if (!newMenu.hidden && !newMenu.contains(event.target) && !newMenuButton.contains(event.target)) {
-        newMenu.hidden = true;
+        hideTemporary(newMenu);
         newMenuButton.setAttribute("aria-expanded", "false");
       }
     });
     document.addEventListener("keydown", function (event) {
       if (event.key === "Escape" && !newMenu.hidden) {
-        newMenu.hidden = true;
+        hideTemporary(newMenu);
         newMenuButton.setAttribute("aria-expanded", "false");
         newMenuButton.focus();
       }
@@ -865,6 +918,10 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   var searchInput = document.getElementById("file-search");
+  var globalSearchWrap = document.querySelector(".global-search-wrap");
+  var searchSuggestions = document.getElementById("global-search-suggestions");
+  var searchSuggestionList = searchSuggestions ? searchSuggestions.querySelector(".global-search-suggestion-list") : null;
+  var searchShowAll = searchSuggestions ? searchSuggestions.querySelector(".global-search-show-all") : null;
   var globalSearchClear = document.getElementById("global-search-clear");
   var typeFilterButton = document.getElementById("type-filter-button");
   var typeFilterMenu = document.getElementById("type-filter-menu");
@@ -886,9 +943,204 @@ document.addEventListener("DOMContentLoaded", function () {
   var loadedSearchQuery = workspaceState.get("search") || "";
   var searchRequestTimer = null;
   var searchRequestController = null;
+  var suggestionRequestTimer = null;
+  var suggestionRequestController = null;
   var activeSortField = ["date", "name", "size"].includes(workspaceState.get("sort")) ? workspaceState.get("sort") : "date";
   var activeSortDirection = workspaceState.get("direction") === "asc" ? "asc" : "desc";
+  var workspaceLoadingGeneration = 0;
   if (searchInput && workspaceState.has("search")) searchInput.value = workspaceState.get("search");
+  function hideSearchSuggestions() {
+    if (!searchSuggestions || !searchInput) return;
+    searchInput.setAttribute("aria-expanded", "false");
+    hideTemporary(searchSuggestions, function () {
+      if (searchSuggestionList) searchSuggestionList.replaceChildren();
+      if (searchShowAll) searchShowAll.hidden = true;
+    });
+  }
+  function renderSearchSuggestions(result, query) {
+    if (!searchSuggestions || !searchSuggestionList || !searchInput || searchInput.value.trim() !== query) return;
+    var suggestions = Array.isArray(result.suggestions) ? result.suggestions.slice(0, 5) : [];
+    if (!suggestions.length) {
+      hideSearchSuggestions();
+      return;
+    }
+    searchSuggestionList.replaceChildren();
+    suggestions.forEach(function (suggestion) {
+      var link = document.createElement("a");
+      link.className = "global-search-suggestion";
+      link.href = suggestion.url;
+      link.dataset.kind = suggestion.kind;
+      link.setAttribute("role", "option");
+      var icon = document.createElement("img");
+      icon.src = suggestion.icon_url;
+      icon.alt = "";
+      var copy = document.createElement("span");
+      copy.className = "global-search-suggestion-copy";
+      var name = document.createElement("strong");
+      name.textContent = suggestion.name;
+      var detail = document.createElement("small");
+      detail.textContent = [suggestion.location, suggestion.type].filter(Boolean).join(" \u00b7 ");
+      copy.append(name, detail);
+      link.append(icon, copy);
+      searchSuggestionList.appendChild(link);
+    });
+    if (searchShowAll) {
+      var showAllUrl = currentWorkspaceUrl();
+      showAllUrl.searchParams.set("search", query);
+      searchShowAll.href = showAllUrl.toString();
+      searchShowAll.hidden = !result.has_more;
+    }
+    showTemporary(searchSuggestions);
+    searchInput.setAttribute("aria-expanded", "true");
+  }
+  function loadSearchSuggestions() {
+    if (!searchInput || !globalSearchWrap || !globalSearchWrap.dataset.searchSuggestionsUrl) return;
+    var query = searchInput.value.trim();
+    if (!query) {
+      if (suggestionRequestController) suggestionRequestController.abort();
+      hideSearchSuggestions();
+      return;
+    }
+    if (suggestionRequestController) suggestionRequestController.abort();
+    suggestionRequestController = new AbortController();
+    var suggestionsUrl = new URL(globalSearchWrap.dataset.searchSuggestionsUrl, window.location.href);
+    var workspaceUrl = currentWorkspaceUrl();
+    suggestionsUrl.searchParams.set("q", query);
+    ["section", "folder", "event"].forEach(function (key) {
+      if (workspaceUrl.searchParams.has(key)) suggestionsUrl.searchParams.set(key, workspaceUrl.searchParams.get(key));
+    });
+    fetch(suggestionsUrl.toString(), {
+      headers: { "X-Requested-With": "XMLHttpRequest" },
+      credentials: "same-origin",
+      signal: suggestionRequestController.signal
+    }).then(function (response) {
+      if (!response.ok || !response.headers.get("content-type")?.includes("application/json")) throw new Error("Suggestion request failed");
+      return response.json();
+    }).then(function (result) {
+      if (!result.ok) throw new Error("Suggestion request failed");
+      renderSearchSuggestions(result, query);
+    }).catch(function (error) {
+      if (error.name !== "AbortError") hideSearchSuggestions();
+    });
+  }
+  function skeletonShapes(count, className) {
+    return Array.from({ length: count }, function () { return '<span class="workspace-skeleton-shape ' + className + '"></span>'; }).join("");
+  }
+  function tableSkeletonMarkup(rowCount) {
+    return '<div class="workspace-skeleton-table">' +
+      '<div class="workspace-skeleton-table-head">' + skeletonShapes(5, "workspace-skeleton-line") + '</div>' +
+      Array.from({ length: rowCount }, function (_value, index) {
+        return '<div class="workspace-skeleton-row">' +
+          '<span class="workspace-skeleton-shape workspace-skeleton-icon"></span>' +
+          '<span class="workspace-skeleton-shape workspace-skeleton-name' + (index % 3 === 2 ? ' is-short' : '') + '"></span>' +
+          skeletonShapes(3, "workspace-skeleton-meta") +
+          '<span class="workspace-skeleton-shape workspace-skeleton-action"></span>' +
+          '</div>';
+      }).join("") + '</div>';
+  }
+  function mediaSkeletonMarkup(count, kind) {
+    return '<div class="workspace-skeleton-media-grid workspace-skeleton-media-grid--' + kind + '">' +
+      Array.from({ length: count }, function () {
+        return '<div class="workspace-skeleton-media-card">' +
+          '<div class="workspace-skeleton-media-header"><span class="workspace-skeleton-shape workspace-skeleton-card-title"></span><span class="workspace-skeleton-shape workspace-skeleton-action"></span></div>' +
+          '<span class="workspace-skeleton-shape workspace-skeleton-media"></span>' +
+          '</div>';
+      }).join("") + '</div>';
+  }
+  function createWorkspaceSkeleton(results) {
+    var skeleton = document.createElement("div");
+    skeleton.className = "workspace-loading-skeleton";
+    skeleton.setAttribute("aria-hidden", "true");
+    var folderSections = results.querySelectorAll("[data-sectioned-folder-view] [data-folder-section]");
+    if (!folderSections.length) {
+      if (results.querySelector(".date-workspace-panel")) {
+        skeleton.innerHTML = '<div class="workspace-skeleton-date-card"><span class="workspace-skeleton-shape workspace-skeleton-date-title"></span>' + skeletonShapes(2, "workspace-skeleton-line") + '</div>';
+      } else {
+        skeleton.innerHTML = tableSkeletonMarkup(6);
+      }
+      return skeleton;
+    }
+    var sections = document.createElement("div");
+    sections.className = "workspace-skeleton-sections";
+    folderSections.forEach(function (section) {
+      var sectionSkeleton = document.createElement("section");
+      sectionSkeleton.className = "workspace-skeleton-section";
+      sectionSkeleton.innerHTML = '<span class="workspace-skeleton-shape workspace-skeleton-heading"></span>';
+      if (section.querySelector(".presentation-grid")) {
+        var presentationCount = Math.max(1, Math.min(3, section.querySelectorAll(".folder-content-card--presentation").length));
+        sectionSkeleton.classList.add("workspace-skeleton-section--presentation");
+        sectionSkeleton.insertAdjacentHTML("beforeend", '<div class="workspace-skeleton-presentation-list">' + Array.from({ length: presentationCount }, function () { return '<div class="workspace-skeleton-presentation"><div class="workspace-skeleton-presentation-header"><span class="workspace-skeleton-shape workspace-skeleton-card-title"></span><span class="workspace-skeleton-shape workspace-skeleton-action"></span></div><span class="workspace-skeleton-shape workspace-skeleton-stage"></span><span class="workspace-skeleton-shape workspace-skeleton-page"></span></div>'; }).join("") + '</div>');
+      } else if (section.querySelector(".folder-image-grid")) {
+        var imageCount = Math.max(1, Math.min(10, section.querySelectorAll(".folder-content-card--image").length));
+        sectionSkeleton.insertAdjacentHTML("beforeend", mediaSkeletonMarkup(imageCount, "images"));
+      } else if (section.matches("[data-folder-carousel]")) {
+        var videoCount = Math.max(1, Math.min(3, section.querySelectorAll(".folder-content-card").length));
+        sectionSkeleton.insertAdjacentHTML("beforeend", mediaSkeletonMarkup(videoCount, "videos"));
+      } else if (section.querySelector(".file-table")) {
+        sectionSkeleton.insertAdjacentHTML("beforeend", tableSkeletonMarkup(3));
+      } else {
+        sectionSkeleton.insertAdjacentHTML("beforeend", mediaSkeletonMarkup(3, "folders"));
+      }
+      sections.appendChild(sectionSkeleton);
+    });
+    skeleton.appendChild(sections);
+    return skeleton;
+  }
+  function showWorkspaceSkeleton() {
+    var results = document.getElementById("file-results");
+    var generation = ++workspaceLoadingGeneration;
+    if (!results) return generation;
+    results.querySelector(".workspace-loading-skeleton")?.remove();
+    results.style.minHeight = Math.max(280, Math.ceil(results.getBoundingClientRect().height)) + "px";
+    results.classList.add("is-workspace-loading");
+    results.setAttribute("aria-busy", "true");
+    results.appendChild(createWorkspaceSkeleton(results));
+    return generation;
+  }
+  function hideWorkspaceSkeleton(generation) {
+    if (generation && generation !== workspaceLoadingGeneration) return;
+    var results = document.getElementById("file-results");
+    if (!results) return;
+    results.querySelector(".workspace-loading-skeleton")?.remove();
+    results.classList.remove("is-workspace-loading");
+    results.removeAttribute("aria-busy");
+    results.style.minHeight = "";
+  }
+  function initializeWorkspaceMediaLoading(root) {
+    (root || document).querySelectorAll(".media-card-preview").forEach(function (preview) {
+      var media = preview.querySelector("img, video");
+      if (!media || preview.dataset.loadingInitialized === "true") return;
+      preview.dataset.loadingInitialized = "true";
+      preview.classList.add("is-media-loading");
+      function ready() { preview.classList.remove("is-media-loading"); }
+      function failed() { preview.classList.remove("is-media-loading"); }
+      if (media.tagName === "IMG" && media.complete) {
+        ready();
+        return;
+      }
+      if (media.tagName === "VIDEO" && media.readyState >= 1) {
+        ready();
+        return;
+      }
+      media.addEventListener(media.tagName === "VIDEO" ? "loadedmetadata" : "load", ready, { once: true });
+      media.addEventListener("error", failed, { once: true });
+    });
+  }
+  initializeWorkspaceMediaLoading(document);
+  document.addEventListener("click", function (event) {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    var link = event.target.closest("a[href]");
+    if (!link || link.hasAttribute("download") || (link.target && link.target !== "_self")) return;
+    var item = link.closest("[data-kind]");
+    var isWorkspaceNavigation = link.matches(".sidebar-link, .breadcrumbs a, .folder-card-main, .location-link, .global-search-show-all") ||
+      (item && (item.dataset.kind === "folder" || item.dataset.kind === "event"));
+    if (!isWorkspaceNavigation) return;
+    var destination;
+    try { destination = new URL(link.href, window.location.href); }
+    catch (_error) { return; }
+    if (destination.origin !== window.location.origin || destination.href === window.location.href) return;
+    showWorkspaceSkeleton();
+  });
   function updateGlobalSearchClear() {
     if (globalSearchClear && searchInput) globalSearchClear.hidden = !searchInput.value;
   }
@@ -911,6 +1163,7 @@ document.addEventListener("DOMContentLoaded", function () {
       row.dataset.previewBound = "true";
       row.addEventListener("click", function (event) {
         if (event.target.closest("a, button, input, label, select, textarea, .item-actions-card")) return;
+        showWorkspaceSkeleton();
         window.location.href = navigationUrl;
       });
     });
@@ -1009,8 +1262,13 @@ document.addEventListener("DOMContentLoaded", function () {
       var next = preview.querySelector("[data-powerpoint-next]");
       var stage = preview.querySelector(".inline-presentation-stage");
       if (!canvas || !message || !status || !previous || !next) return;
+      preview.classList.add("is-powerpoint-loading");
+      preview.setAttribute("aria-busy", "true");
       if (stage) stage.addEventListener("click", function (event) { event.stopPropagation(); });
       function unavailable(text) {
+        preview.classList.remove("is-powerpoint-loading");
+        preview.classList.add("is-powerpoint-unavailable");
+        preview.removeAttribute("aria-busy");
         canvas.classList.remove("is-ready");
         message.hidden = false;
         message.textContent = text;
@@ -1050,6 +1308,8 @@ document.addEventListener("DOMContentLoaded", function () {
           context.drawImage(slide, 0, 0);
           currentIndex = index;
           canvas.classList.add("is-ready");
+          preview.classList.remove("is-powerpoint-loading", "is-powerpoint-unavailable");
+          preview.removeAttribute("aria-busy");
           message.hidden = true;
           updateControls();
           if (index + 1 < result.slides.length) loadSlide(index + 1).catch(function () {});
@@ -1167,13 +1427,15 @@ document.addEventListener("DOMContentLoaded", function () {
     sortButton.dataset.sortBound = "true";
     sortButton.addEventListener("click", function (event) {
       event.stopPropagation();
-      sortMenu.hidden = !sortMenu.hidden;
-      sortButton.setAttribute("aria-expanded", String(!sortMenu.hidden));
+      var shouldOpen = !temporaryIsOpen(sortMenu);
+      if (shouldOpen) showTemporary(sortMenu);
+      else hideTemporary(sortMenu);
+      sortButton.setAttribute("aria-expanded", String(shouldOpen));
     });
     sortOptions.forEach(function (option) {
       option.addEventListener("click", function () {
         sortFileRows(option.dataset.sortField, activeSortDirection);
-        sortMenu.hidden = true;
+        hideTemporary(sortMenu);
         sortButton.setAttribute("aria-expanded", "false");
       });
     });
@@ -1282,7 +1544,7 @@ document.addEventListener("DOMContentLoaded", function () {
     syncWorkspaceState();
   }
   function closeFilterMenu(button, menu) {
-    if (menu) menu.hidden = true;
+    hideTemporary(menu);
     if (button) button.setAttribute("aria-expanded", "false");
   }
   function matchesTypeFilter(row) {
@@ -1363,6 +1625,7 @@ document.addEventListener("DOMContentLoaded", function () {
     sortFileRows(activeSortField, activeSortDirection);
     initializeFolderCarousels(nextResults);
     initializeInlinePowerpointPreviews(nextResults);
+    initializeWorkspaceMediaLoading(nextResults);
     applyFileFilters();
     updateFilenameExtensions();
   }
@@ -1372,12 +1635,14 @@ document.addEventListener("DOMContentLoaded", function () {
       return workspaceRefreshPromise;
     }
     var destination = currentWorkspaceUrl();
+    var loadingGeneration = showWorkspaceSkeleton();
     workspaceRefreshPromise = fetch(destination.toString(), {
       headers: { "X-Requested-With": "XMLHttpRequest" }
     }).then(function (response) {
       if (!response.ok) throw new Error("Workspace refresh failed");
       return response.text();
     }).then(applyWorkspaceResultsHtml).catch(function () {
+      hideWorkspaceSkeleton(loadingGeneration);
       showToast("The upload finished, but the workspace could not be refreshed.", "error");
     }).finally(function () {
       workspaceRefreshPromise = null;
@@ -1394,6 +1659,7 @@ document.addEventListener("DOMContentLoaded", function () {
     var requestedSearchQuery = destination.searchParams.get("search") || "";
     if (searchRequestController) searchRequestController.abort();
     searchRequestController = new AbortController();
+    var loadingGeneration = showWorkspaceSkeleton();
     fetch(destination.toString(), {
       headers: { "X-Requested-With": "XMLHttpRequest" },
       signal: searchRequestController.signal
@@ -1406,23 +1672,47 @@ document.addEventListener("DOMContentLoaded", function () {
       loadedSearchQuery = requestedSearchQuery;
       window.history.replaceState(null, "", destination.toString());
     }).catch(function (error) {
-      if (error.name !== "AbortError") showToast("Search results could not be refreshed.", "error");
+      if (error.name !== "AbortError") {
+        hideWorkspaceSkeleton(loadingGeneration);
+        showToast("Search results could not be refreshed.", "error");
+      }
     });
   }
   if (searchInput) {
     searchInput.addEventListener("input", function () {
       updateGlobalSearchClear();
       applyFileFilters();
+      if (suggestionRequestTimer) window.clearTimeout(suggestionRequestTimer);
+      if (!searchInput.value.trim()) hideSearchSuggestions();
+      else suggestionRequestTimer = window.setTimeout(loadSearchSuggestions, 140);
       if (searchRequestTimer) window.clearTimeout(searchRequestTimer);
       searchRequestTimer = window.setTimeout(reloadGlobalSearch, 250);
     });
+    searchInput.addEventListener("focus", function () {
+      if (searchInput.value.trim()) loadSearchSuggestions();
+    });
     searchInput.addEventListener("keydown", function (event) {
+      if (event.key === "Escape") {
+        hideSearchSuggestions();
+        return;
+      }
+      if (event.key === "ArrowDown" && searchSuggestions && !searchSuggestions.hidden) {
+        var firstSuggestion = searchSuggestions.querySelector("a:not([hidden])");
+        if (firstSuggestion) {
+          event.preventDefault();
+          firstSuggestion.focus();
+        }
+        return;
+      }
       if (event.key !== "Enter") return;
       event.preventDefault();
       if (searchRequestTimer) window.clearTimeout(searchRequestTimer);
       reloadGlobalSearch();
     });
   }
+  document.addEventListener("click", function (event) {
+    if (globalSearchWrap && !globalSearchWrap.contains(event.target)) hideSearchSuggestions();
+  });
   if (globalSearchClear && searchInput) globalSearchClear.addEventListener("click", function () {
     searchInput.value = "";
     updateGlobalSearchClear();
@@ -1445,14 +1735,15 @@ document.addEventListener("DOMContentLoaded", function () {
   }
   function toggleFilterMenu(button, menu) {
     if (!button || !menu) return;
-    var shouldOpen = menu.hidden;
+    var shouldOpen = !temporaryIsOpen(menu);
     [typeFilterMenu, dateFilterMenu].forEach(function (otherMenu) {
-      if (otherMenu) otherMenu.hidden = true;
+      if (otherMenu !== menu) hideTemporary(otherMenu);
     });
     [typeFilterButton, dateFilterButton].forEach(function (otherButton) {
       if (otherButton) otherButton.setAttribute("aria-expanded", "false");
     });
-    menu.hidden = !shouldOpen;
+    if (shouldOpen) showTemporary(menu);
+    else hideTemporary(menu);
     button.setAttribute("aria-expanded", String(shouldOpen));
     if (shouldOpen) positionFilterMenu(button, menu);
   }
@@ -1558,14 +1849,14 @@ document.addEventListener("DOMContentLoaded", function () {
   });
   document.addEventListener("click", function (event) {
     if (sortMenu && sortButton && !sortMenu.hidden && !sortMenu.contains(event.target) && !sortButton.contains(event.target)) {
-      sortMenu.hidden = true;
+      hideTemporary(sortMenu);
       sortButton.setAttribute("aria-expanded", "false");
     }
     [[typeFilterButton, typeFilterMenu], [dateFilterButton, dateFilterMenu]].forEach(function (control) {
       var button = control[0];
       var menu = control[1];
       if (button && menu && !menu.hidden && !menu.contains(event.target) && !button.contains(event.target)) {
-        menu.hidden = true;
+        hideTemporary(menu);
         button.setAttribute("aria-expanded", "false");
       }
     });
@@ -1626,7 +1917,7 @@ document.addEventListener("DOMContentLoaded", function () {
   var activeItemActionButton = null;
   var starredRemovalTimers = {};
   function closeItemActions() {
-    if (itemActionsModal) itemActionsModal.hidden = true;
+    hideTemporary(itemActionsModal);
     if (itemProperties) itemProperties.hidden = true;
     if (activeItemActionButton) activeItemActionButton.setAttribute("aria-expanded", "false");
     if (itemActionsModal) {
@@ -1652,10 +1943,10 @@ document.addEventListener("DOMContentLoaded", function () {
     return selection;
   }
   function closeRenameItem() {
-    if (renameItemModal) renameItemModal.hidden = true;
+    hideTemporary(renameItemModal);
   }
   function closeEditEvent() {
-    if (editEventModal) editEventModal.hidden = true;
+    hideTemporary(editEventModal);
   }
   function closeProperties() {
     if (!propertiesPanel) return;
@@ -1730,7 +2021,7 @@ document.addEventListener("DOMContentLoaded", function () {
       var isStarred = starToggle && starToggle.dataset.starred === "false";
       starItemButton.innerHTML = isStarred ? '<i class="bi bi-star-fill"></i> Unstar' : '<i class="bi bi-star"></i> Star';
     }
-    itemActionsModal.hidden = false;
+    showTemporary(itemActionsModal);
     activeItemActionButton.setAttribute("aria-expanded", "true");
     positionItemActions();
   }
@@ -1837,7 +2128,7 @@ document.addEventListener("DOMContentLoaded", function () {
     var isEvent = row.dataset.kind === "event";
     var itemName = row.dataset.itemName || "";
     if (isEvent) {
-      if (editEventModal) editEventModal.hidden = false;
+      showTemporary(editEventModal);
       if (editEventId) editEventId.value = row.dataset.itemId;
       if (editEventName) editEventName.value = itemName;
       if (editEventIconPicker) {
@@ -1848,7 +2139,7 @@ document.addEventListener("DOMContentLoaded", function () {
       if (editEventName) editEventName.focus();
       return;
     }
-    if (renameItemModal) renameItemModal.hidden = false;
+    showTemporary(renameItemModal);
     document.getElementById("rename-item-kind").value = row.dataset.kind;
     document.getElementById("rename-item-id").value = row.dataset.itemId;
     var extensionStart = itemName.lastIndexOf(".");
@@ -1969,12 +2260,12 @@ document.addEventListener("DOMContentLoaded", function () {
   var folderModal = document.getElementById("folder-modal");
   var cancelFolder = document.getElementById("cancel-folder");
   function closeFolderModal() {
-    if (folderModal) folderModal.hidden = true;
+    hideTemporary(folderModal);
   }
   if (newFolderButton && folderModal) {
     newFolderButton.addEventListener("click", function () {
-      folderModal.hidden = false;
-      if (newMenu) newMenu.hidden = true;
+      showTemporary(folderModal);
+      hideTemporary(newMenu);
       var folderName = document.getElementById("folder-name");
       if (folderName) folderName.focus();
     });
@@ -1985,8 +2276,8 @@ document.addEventListener("DOMContentLoaded", function () {
   }
   function openEventModal() {
     if (!eventModal) return;
-    eventModal.hidden = false;
-    if (newMenu) newMenu.hidden = true;
+    showTemporary(eventModal);
+    hideTemporary(newMenu);
     var eventName = document.getElementById("event-name");
     if (eventName) eventName.focus();
   }
@@ -1995,8 +2286,8 @@ document.addEventListener("DOMContentLoaded", function () {
     if (eventsHomeAddEvent) eventsHomeAddEvent.addEventListener("click", openEventModal);
     if (dateWorkspaceAddEvent) dateWorkspaceAddEvent.addEventListener("click", openEventModal);
     if (dateWorkspaceAddEventSecondary) dateWorkspaceAddEventSecondary.addEventListener("click", openEventModal);
-    if (cancelEvent) cancelEvent.addEventListener("click", function () { eventModal.hidden = true; });
-    eventModal.addEventListener("click", function (event) { if (event.target === eventModal) eventModal.hidden = true; });
+    if (cancelEvent) cancelEvent.addEventListener("click", function () { hideTemporary(eventModal); });
+    eventModal.addEventListener("click", function (event) { if (event.target === eventModal) hideTemporary(eventModal); });
   }
 
   var eventsCalendarButton = document.getElementById("events-calendar-button");
@@ -2014,13 +2305,13 @@ document.addEventListener("DOMContentLoaded", function () {
   }
   function closeEventsCalendarModal() {
     if (!eventsCalendarModal) return;
-    eventsCalendarModal.hidden = true;
+    hideTemporary(eventsCalendarModal);
     if (eventsCalendarButton) eventsCalendarButton.setAttribute("aria-expanded", "false");
     syncCalendarModalState(false);
   }
   function openEventsCalendarModal() {
     if (!eventsCalendarModal) return;
-    eventsCalendarModal.hidden = false;
+    showTemporary(eventsCalendarModal);
     if (eventsCalendarButton) eventsCalendarButton.setAttribute("aria-expanded", "true");
     syncCalendarModalState(true);
   }
@@ -2054,7 +2345,7 @@ document.addEventListener("DOMContentLoaded", function () {
   var cancelMove = document.getElementById("cancel-move");
   var moveDestination = document.getElementById("move-destination");
   function closeMoveModal() {
-    if (moveModal) moveModal.hidden = true;
+    hideTemporary(moveModal);
   }
   function openMoveModal(selections) {
     if (!moveModal || !moveDestination || !selections.length) return;
@@ -2072,11 +2363,11 @@ document.addEventListener("DOMContentLoaded", function () {
     var availableDestination = Array.from(moveDestination.options).find(function (option) { return !option.hidden; });
     if (!availableDestination) return;
     moveDestination.value = availableDestination.value;
-    moveModal.hidden = false;
+    showTemporary(moveModal);
     moveDestination.focus();
   }
   function closeBulkActions() {
-    if (bulkActionsModal) bulkActionsModal.hidden = true;
+    hideTemporary(bulkActionsModal);
     if (bulkActionsButton) bulkActionsButton.setAttribute("aria-expanded", "false");
   }
   function positionBulkActions() {
@@ -2167,7 +2458,10 @@ document.addEventListener("DOMContentLoaded", function () {
   }
   function updateBulkToolbar() {
     var selected = itemSelections.filter(function (input) { return input.checked; });
-    if (bulkToolbar) bulkToolbar.hidden = selected.length === 0;
+    if (bulkToolbar) {
+      if (selected.length) showTemporary(bulkToolbar);
+      else hideTemporary(bulkToolbar);
+    }
     if (selected.length === 0) closeBulkActions();
     if (workspaceTitle) workspaceTitle.classList.toggle("bulk-selection-active", selected.length > 0);
     if (selectedCount) selectedCount.textContent = selected.length + " item" + (selected.length === 1 ? "" : "s") + " selected";
@@ -2256,8 +2550,8 @@ document.addEventListener("DOMContentLoaded", function () {
   if (bulkActionsButton) bulkActionsButton.addEventListener("click", function (event) {
     event.stopPropagation();
     if (!bulkActionsModal) return;
-    if (bulkActionsModal.hidden) {
-      bulkActionsModal.hidden = false;
+    if (!temporaryIsOpen(bulkActionsModal)) {
+      showTemporary(bulkActionsModal);
       bulkActionsButton.setAttribute("aria-expanded", "true");
       positionBulkActions();
     } else {

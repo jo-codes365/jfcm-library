@@ -1406,7 +1406,14 @@ def dashboard():
                 (session["user_id"], deleted, search_term, *folder_scope_values, *event_scope_values),
             )
             files = cursor.fetchall()
-            if section == "trash":
+            if section == "events" and event_id is None:
+                cursor.execute(
+                    "SELECT id, name, event_date, event_type, share_token, created_at, is_starred FROM events "
+                    "WHERE user_id = %s AND is_deleted = FALSE AND name LIKE %s ORDER BY name",
+                    (session["user_id"], search_term),
+                )
+                events = cursor.fetchall()
+            elif section == "trash":
                 cursor.execute(
                     "SELECT id, name, event_date, event_type, share_token, deleted_at, created_at, is_starred FROM events "
                     "WHERE user_id = %s AND is_deleted = TRUE AND name LIKE %s ORDER BY deleted_at DESC",
@@ -1464,7 +1471,7 @@ def dashboard():
         cursor.close()
         items = ([{"kind": "folder", "name": item["name"], "date": item["created_at"], "mime_type": "Folder", "location": paths.get(item["parent_id"], "Library"), **item} for item in folders] +
                  [{"kind": "file", "name": item["original_filename"], "parent_id": item["folder_id"], "date": item["uploaded_at"], "location": paths.get(item["folder_id"], "Library"), **item} for item in files] +
-                 [{"kind": "event", "parent_id": None, "size": 0, "file_size": 0, "mime_type": "Event", "location": "Events", **item, "date": item["deleted_at"] if deleted else item["event_date"]} for item in (events if (section == "events" and event_id is None and not search_query and not is_event_date_workspace) or section == "trash" else [])])
+                 [{"kind": "event", "parent_id": None, "size": 0, "file_size": 0, "mime_type": "Event", "location": "Events", **item, "date": item["deleted_at"] if deleted else item["event_date"]} for item in (events if (section == "events" and event_id is None) or section == "trash" else [])])
         for item in items:
             location_folder_id = item["parent_id"]
             if deleted:
@@ -1553,6 +1560,142 @@ def dashboard():
             calendar_next_url=url_for("dashboard", calendar="open", calendar_year=shift_calendar_month(calendar_year, calendar_month, 1)[0], calendar_month=shift_calendar_month(calendar_year, calendar_month, 1)[1]),
             calendar_day_urls={},
         )
+
+
+@app.get("/search-suggestions")
+@login_required
+def search_suggestions():
+    query = request.args.get("q", "").strip()
+    if not query:
+        return jsonify({"ok": True, "suggestions": [], "has_more": False})
+
+    section = request.args.get("section", "files")
+    folder_id = request.args.get("folder", type=int)
+    event_id = request.args.get("event", type=int)
+    if section not in {"files", "recent", "starred", "trash", "events"}:
+        abort(404)
+
+    deleted = section == "trash"
+    owner_id = session["user_id"]
+    current_event = None
+    if event_id is not None:
+        if section != "events":
+            abort(400)
+        current_event = owned_event(event_id)
+        if not current_event:
+            abort(404)
+
+    folder_scope = []
+    if folder_id is not None:
+        current_folder = owned_folder(folder_id, include_deleted=deleted)
+        if (
+            not current_folder
+            or (section == "events" and current_folder.get("event_id") != event_id)
+            or (section != "events" and current_folder.get("event_id") is not None)
+        ):
+            abort(404)
+        folder_scope = [folder_id, *folder_descendants(folder_id)]
+
+    search_term = f"%{query}%"
+    cursor = get_db().cursor(dictionary=True)
+    try:
+        if section == "events" and event_id is None:
+            cursor.execute(
+                "SELECT id, name, event_type FROM events "
+                "WHERE user_id = %s AND is_deleted = FALSE AND name LIKE %s "
+                "ORDER BY name LIMIT 6",
+                (owner_id, search_term),
+            )
+            matches = [
+                {
+                    "kind": "event",
+                    "name": display_name(item["name"]),
+                    "type": event_type_label(item.get("event_type")),
+                    "location": "Events",
+                    "icon_url": url_for("static", filename=f"images/{event_icon_file(item.get('event_type'))}"),
+                    "url": url_for("dashboard", section="events", event=item["id"]),
+                }
+                for item in cursor.fetchall()
+            ]
+        else:
+            if section == "events":
+                event_condition = " AND event_id = %s"
+                event_values = (event_id,)
+            else:
+                event_condition = " AND event_id IS NULL"
+                event_values = ()
+            if folder_scope:
+                placeholders = ",".join(["%s"] * len(folder_scope))
+                folder_condition = f" AND id IN ({placeholders})"
+                file_condition = f" AND folder_id IN ({placeholders})"
+                folder_values = tuple(folder_scope)
+            else:
+                folder_condition = ""
+                file_condition = ""
+                folder_values = ()
+
+            cursor.execute(
+                "SELECT id, name, parent_id FROM folders "
+                f"WHERE user_id = %s AND is_deleted = %s AND name LIKE %s{folder_condition}{event_condition} "
+                "ORDER BY name LIMIT 6",
+                (owner_id, deleted, search_term, *folder_values, *event_values),
+            )
+            folders = cursor.fetchall()
+            cursor.execute(
+                "SELECT id, original_filename, folder_id, mime_type FROM files "
+                f"WHERE user_id = %s AND is_deleted = %s AND original_filename LIKE %s{file_condition}{event_condition} "
+                "ORDER BY uploaded_at DESC LIMIT 6",
+                (owner_id, deleted, search_term, *folder_values, *event_values),
+            )
+            files = cursor.fetchall()
+            cursor.execute(
+                "SELECT id, name, parent_id FROM folders "
+                f"WHERE user_id = %s AND is_deleted = %s{event_condition}",
+                (owner_id, deleted, *event_values),
+            )
+            paths = folder_paths(cursor.fetchall())
+            base_location = display_name(current_event["name"]) if current_event else ("Trash" if deleted else "Library")
+            matches = []
+            for item in folders:
+                matches.append({
+                    "kind": "folder",
+                    "name": display_name(item["name"]),
+                    "type": "Folder",
+                    "location": paths.get(item["parent_id"], base_location),
+                    "icon_url": url_for("static", filename="images/Folder.png"),
+                    "url": url_for("dashboard", section="trash") if deleted else url_for("dashboard", section="events", event=event_id, folder=item["id"]) if section == "events" else url_for("dashboard", folder=item["id"]),
+                })
+            for item in files:
+                matches.append({
+                    "kind": "file",
+                    "name": display_name(item["original_filename"]),
+                    "type": clean_file_type(item),
+                    "location": paths.get(item["folder_id"], base_location),
+                    "icon_url": url_for("static", filename=f"images/{file_type_icon(item)}"),
+                    "url": url_for("dashboard", section="trash") if deleted else url_for("preview", file_id=item["id"]),
+                })
+            if section == "trash" and len(matches) <= 5:
+                cursor.execute(
+                    "SELECT id, name, event_type FROM events "
+                    "WHERE user_id = %s AND is_deleted = TRUE AND name LIKE %s ORDER BY name LIMIT 6",
+                    (owner_id, search_term),
+                )
+                for item in cursor.fetchall():
+                    matches.append({
+                        "kind": "event",
+                        "name": display_name(item["name"]),
+                        "type": event_type_label(item.get("event_type")),
+                        "location": "Trash",
+                        "icon_url": url_for("static", filename=f"images/{event_icon_file(item.get('event_type'))}"),
+                        "url": url_for("dashboard", section="trash"),
+                    })
+    except MySQLError:
+        app.logger.exception("Search suggestions database error")
+        return jsonify({"ok": False, "error": "Search suggestions are temporarily unavailable."}), 500
+    finally:
+        cursor.close()
+
+    return jsonify({"ok": True, "suggestions": matches[:5], "has_more": len(matches) > 5})
 
 
 @app.get("/public-files")

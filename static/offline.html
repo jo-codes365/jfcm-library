@@ -142,6 +142,33 @@
       var activeRow = null;
       var activeActionButton = null;
       var allRows = [];
+      var actionsHideTimer = null;
+
+      function showActionsContainer() {
+        if (actionsHideTimer) window.clearTimeout(actionsHideTimer);
+        actionsHideTimer = null;
+        actionsModal.hidden = false;
+        actionsModal.classList.remove("is-closing");
+        if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+          actionsModal.classList.add("is-visible");
+          return;
+        }
+        window.requestAnimationFrame(function () { actionsModal.classList.add("is-visible"); });
+      }
+
+      function hideActionsContainer() {
+        if (actionsModal.hidden) return;
+        if (actionsHideTimer) window.clearTimeout(actionsHideTimer);
+        actionsModal.classList.remove("is-visible");
+        actionsModal.classList.add("is-closing");
+        var finish = function () {
+          actionsModal.hidden = true;
+          actionsModal.classList.remove("is-closing");
+          actionsHideTimer = null;
+        };
+        if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) finish();
+        else actionsHideTimer = window.setTimeout(finish, 180);
+      }
 
       function setSidebar(open) {
         sidebar.classList.toggle("is-open", open);
@@ -156,7 +183,7 @@
       document.getElementById("retry-button").addEventListener("click", function () { location.reload(); });
 
       function closeActions() {
-        actionsModal.hidden = true;
+        hideActionsContainer();
         if (activeActionButton) activeActionButton.setAttribute("aria-expanded", "false");
         activeActionButton = null;
       }
@@ -181,7 +208,7 @@
         openItem.href = row.dataset.openUrl;
         downloadItem.href = row.dataset.downloadUrl;
         document.getElementById("item-actions-title").textContent = row.dataset.kind === "folder" ? "Folder actions" : row.dataset.kind === "event" ? "Event actions" : "File actions";
-        actionsModal.hidden = false;
+        showActionsContainer();
         button.setAttribute("aria-expanded", "true");
         positionActions();
       }
