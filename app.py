@@ -1509,14 +1509,6 @@ EVENT_TYPE_FILE_MAP = {key: filename for key, _label, filename in EVENT_TYPE_OPT
 
 def classify_file_type(file_or_mime, filename=None):
     if isinstance(file_or_mime, dict):
-        if (file_or_mime.get("kind") or "").strip().lower() == "event":
-            return {
-                "key": "event",
-                "label": "Event",
-                "icon": event_icon_file(file_or_mime.get("event_type")),
-                "mime_type": "event",
-                "extension": "",
-            }
         mime_type = (file_or_mime.get("mime_type") or "").lower().strip()
         filename = file_or_mime.get("original_filename") or file_or_mime.get("name") or filename or ""
     else:
@@ -2164,6 +2156,52 @@ def public_files():
     return public_dashboard()
 
 
+@app.get("/public-events")
+def public_events():
+    """Render public Events separately from the Public Files workspace."""
+    cursor = get_db().cursor(dictionary=True)
+    try:
+        cursor.execute(
+            "SELECT id, name, event_date, event_type, share_token, created_at FROM events "
+            "WHERE is_deleted = FALSE AND share_token IS NOT NULL AND share_token <> '' "
+            "ORDER BY event_date DESC, name"
+        )
+        events = cursor.fetchall()
+    except MySQLError:
+        app.logger.exception("Public Events workspace database error")
+        abort(500)
+    finally:
+        cursor.close()
+
+    items = [
+        {
+            "kind": "event",
+            "name": item["name"],
+            "parent_id": None,
+            "size": 0,
+            "file_size": 0,
+            "mime_type": "Event",
+            "location": "Events",
+            "date": item["event_date"],
+            "accessed_at": None,
+            "is_starred": False,
+            **item,
+        }
+        for item in events
+    ]
+    return render_template(
+        "dashboard.html", page_title="Public Events", items=items, total_storage=0, total_files=len(items),
+        section="events", current_folder=None, breadcrumbs=[], folder_id=None, event_id=None, current_event=None,
+        selected_event_date=None, selected_event_date_iso="", is_event_date_workspace=False,
+        date_workspace_events=[], is_trash=False, move_folders=[], sidebar_events=[], search_query="",
+        calendar_auto_open=False, is_global_search=False, is_shared_workspace=False, is_public_workspace=True,
+        workspace_can_edit=False, share_context=None, public_workspace_kind="events",
+        month_name=calendar_module.month_name[date.today().month], year=date.today().year, month=date.today().month,
+        weeks=sunday_first_month_weeks(date.today().year, date.today().month), events_by_day={}, calendar_day_urls={},
+        calendar_previous_url="", calendar_next_url="", show_calendar_back_link=False,
+    )
+
+
 def public_dashboard():
     """Render active resources with public tokens in a read-only workspace."""
     cursor = get_db().cursor(dictionary=True)
@@ -2178,12 +2216,6 @@ def public_dashboard():
             "WHERE is_deleted = FALSE AND share_token IS NOT NULL ORDER BY uploaded_at DESC"
         )
         files = cursor.fetchall()
-        cursor.execute(
-            "SELECT id, name, event_date, event_type, share_token, created_at FROM events "
-            "WHERE is_deleted = FALSE AND share_token IS NOT NULL AND share_token <> '' "
-            "ORDER BY event_date DESC, name"
-        )
-        events = cursor.fetchall()
     except MySQLError:
         app.logger.exception("Public workspace database error")
         abort(500)
@@ -2197,9 +2229,6 @@ def public_dashboard():
         + [{"kind": "file", "name": item["original_filename"], "parent_id": None, "folder_id": None,
             "location": "Public Files", "date": item["uploaded_at"], "accessed_at": None, "is_starred": False,
             **item} for item in files]
-        + [{"kind": "event", "name": item["name"], "parent_id": None, "size": 0, "file_size": 0,
-            "mime_type": "Event", "location": "Public Files", "date": item["event_date"], "accessed_at": None,
-            "is_starred": False, **item} for item in events]
     )
     return render_template(
         "dashboard.html", page_title="Public Files", items=items, total_storage=0, total_files=len(items),
@@ -2207,7 +2236,7 @@ def public_dashboard():
         selected_event_date=None, selected_event_date_iso="", is_event_date_workspace=False,
         date_workspace_events=[], is_trash=False, move_folders=[], sidebar_events=[], search_query="",
         calendar_auto_open=False, is_global_search=False, is_shared_workspace=False, is_public_workspace=True,
-        workspace_can_edit=False, share_context=None,
+        workspace_can_edit=False, share_context=None, public_workspace_kind="files",
         month_name=calendar_module.month_name[date.today().month], year=date.today().year, month=date.today().month,
         weeks=sunday_first_month_weeks(date.today().year, date.today().month), events_by_day={}, calendar_day_urls={},
         calendar_previous_url="", calendar_next_url="", show_calendar_back_link=False,
@@ -3447,9 +3476,10 @@ def public_folder(share_token):
         is_global_search=False,
         is_shared_workspace=True,
         workspace_can_edit=share_context["can_edit"],
-        is_public_workspace=not share_context["can_edit"],
+        is_public_workspace="user_id" not in session,
         share_context=share_context,
         shared_root_folder_id=share_context["item_id"],
+        public_workspace_kind="files",
     )
 
 
@@ -3538,6 +3568,7 @@ def public_event(share_token):
         workspace_can_edit=share_context["can_edit"],
         is_public_workspace=not share_context["can_edit"],
         share_context=share_context,
+        public_workspace_kind="events",
         month_name=calendar_module.month_name[date.today().month],
         year=date.today().year,
         month=date.today().month,

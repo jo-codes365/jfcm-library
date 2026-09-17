@@ -12,7 +12,8 @@
     {% if is_public_workspace %}
     {% if not session.get('user_id') %}
     <nav class="sidebar-nav">
-      <a class="sidebar-link active" href="{{ url_for('public_files') }}"><i class="bi bi-file-earmark-arrow-up"></i>Public Files</a>
+      <a class="sidebar-link {% if public_workspace_kind|default('files') == 'files' %}active{% endif %}" href="{{ url_for('public_files') }}"><i class="bi bi-file-earmark-arrow-up"></i>Public Files</a>
+      <a class="sidebar-link {% if public_workspace_kind|default('files') == 'events' %}active{% endif %}" href="{{ url_for('public_events') }}"><i class="bi bi-calendar-date"></i>Events</a>
     </nav>
     {% endif %}
     <div class="sidebar-footer">
@@ -126,7 +127,7 @@
             <nav id="workspace-breadcrumbs" class="breadcrumbs" aria-label="Current folder path">
               {% if section == 'events' %}
                 {% if current_event or is_event_date_workspace %}
-                  <a href="{{ url_for('public_files') if is_public_workspace else url_for('dashboard', section='events') }}">Events</a>
+                  <a href="{{ url_for('public_events') if is_public_workspace else url_for('dashboard', section='events') }}">Events</a>
                 {% else %}<span>Events</span>{% endif %}
                 {% if is_event_date_workspace %}
                 <span>/</span>
@@ -160,8 +161,10 @@
               <h1>
                 {% if current_folder %}
                 {{ display_name(current_folder.name) }}
+                {% elif current_event %}
+                <span class="workspace-event-title"><img class="event-icon-inline" src="{{ url_for('static', filename='images/' ~ event_icon_file(current_event.event_type)) }}" alt=""><span>{{ display_name(current_event.name) }}</span></span>
                 {% elif is_public_workspace %}
-                Public Files
+                {{ 'Events' if public_workspace_kind|default('files') == 'events' else 'Public Files' }}
                 {% elif is_trash %}
                 Trash
                 {% elif is_global_search %}
@@ -172,8 +175,6 @@
                 Recent
                 {% elif is_event_date_workspace %}
                 {{ selected_event_date.strftime('%b ') }}{{ selected_event_date.day }}{{ selected_event_date.strftime(', %Y') }}
-                {% elif current_event %}
-                <span class="workspace-event-title"><img class="event-icon-inline" src="{{ url_for('static', filename='images/' ~ event_icon_file(current_event.event_type)) }}" alt=""><span>{{ display_name(current_event.name) }}</span></span>
                 {% elif section == 'events' %}
                 Events
                 {% else %}
@@ -183,13 +184,13 @@
               {% if not current_folder %}
               <div class="vr"> </div>
               <div class="filter-controls">
+                {% if not (is_public_workspace and public_workspace_kind|default('files') == 'events' and not current_event) %}
                 <div class="filter-wrap">
                   <button id="type-filter-button" class="button secondary filter-button" type="button" aria-expanded="false" aria-controls="type-filter-menu" title="Filter by type"><span class="filter-button-label">Type</span> <i class="bi bi-caret-down-fill filter-button-icon" aria-hidden="true"></i></button>
                   <div id="type-filter-menu" class="filter-menu" hidden>
                   <p>Filter by type</p>
                   <label><input type="radio" name="file-type-filter" value="all" checked><img class="filter-type-icon" src="{{ url_for('static', filename='images/All.png') }}" alt=""> All types</label>
                   <label><input type="radio" name="file-type-filter" value="folder"><img class="filter-type-icon" src="{{ url_for('static', filename='images/Folder.png') }}" alt=""> Folders</label>
-                  <label><input type="radio" name="file-type-filter" value="event"><img class="filter-type-icon" src="{{ url_for('static', filename='images/Event.png') }}" alt=""> Events</label>
                   <label><input type="radio" name="file-type-filter" value="image"><img class="filter-type-icon" src="{{ url_for('static', filename='images/Image.png') }}" alt=""> Images</label>
                   <label><input type="radio" name="file-type-filter" value="pdf"><img class="filter-type-icon" src="{{ url_for('static', filename='images/PDF.png') }}" alt=""> PDFs</label>
                   <label><input type="radio" name="file-type-filter" value="document"><img class="filter-type-icon" src="{{ url_for('static', filename='images/Word.png') }}" alt=""> Documents</label>
@@ -201,6 +202,7 @@
                   <label><input type="radio" name="file-type-filter" value="other"><img class="filter-type-icon" src="{{ url_for('static', filename='images/File.png') }}" alt=""> Other</label>
                   </div>
                 </div>
+                {% endif %}
                 {% if not is_event_date_workspace %}
                 <div class="filter-wrap">
                   <button id="date-filter-button" class="button secondary filter-button" type="button" aria-expanded="false" aria-controls="date-filter-menu" title="Filter by date" data-date-filter-mode="{{ 'exact' if section == 'events' else 'relative' }}"><span class="filter-button-label">Date</span> <i class="bi bi-caret-down-fill filter-button-icon" aria-hidden="true"></i></button>
@@ -490,10 +492,10 @@
                     {% set item_offline_url = url_for('offline_manifest', kind=item.kind, item_id=item.id) %}
                   {% endif %}
                   {% set item_copy_url = url_for('token_preview', share_token=item.share_token, _external=true) if item.kind == 'file' and item.share_token else url_for('public_event', share_token=current_event.share_token, folder=item.id, _external=true) if item.kind == 'folder' and current_event and current_event.share_token else url_for('public_folder', share_token=item.share_token, _external=true) if item.kind == 'folder' and item.share_token else url_for('public_event', share_token=item.share_token, _external=true) if item.kind == 'event' and item.share_token else '' %}
-                  <tr{% if item.kind in ['file', 'event'] and not is_trash %} class="previewable-row" data-preview-url="{{ item_open_url }}"{% endif %} data-kind="{{ item.kind }}" data-item-id="{{ item.id }}" data-parent-id="{{ item.parent_id or '' }}" data-item-name="{{ item.name }}" data-item-display-name="{{ display_name(item.name) }}" data-item-type="{{ event_type_label(item.event_type) if item.kind == 'event' else 'Folder' if item.kind == 'folder' else clean_file_type(item) }}" data-item-size="{{ display_item_size(item.kind, item.size if item.kind in ['folder', 'event'] else item.file_size) }}" data-item-location="{{ item.location }}" data-item-accessed="{{ format_datetime(item.accessed_at) if item.kind in ['file', 'folder'] and item.accessed_at else '—' }}" data-sort-size="{{ item.size if item.kind == 'folder' else item.file_size }}" data-item-modified="{{ format_datetime(item.date) }}" data-item-date-label="{{ 'Scheduled for' if item.kind == 'event' else 'Date deleted' if is_trash else 'Created or uploaded' }}" data-item-expiration="{{ trash_days_remaining(item.deleted_at) if is_trash and item.deleted_at else '' }}" data-open-url="{{ item_open_url }}" data-download-url="{{ item_download_url }}" data-copy-url="{{ item_copy_url }}"{% if item.kind == 'folder' and not is_trash %} data-folder-id="{{ item.id }}"{% endif %} data-file-type="{{ 'folder' if item.kind == 'folder' else file_type_key(item) }}" data-modified-date="{{ item.date.isoformat() if item.date else '' }}"{% if item.kind == 'event' %} data-item-icon="{{ item.event_type }}"{% endif %}>
+                  <tr{% if item.kind == 'file' and not is_trash %} class="previewable-row" data-preview-url="{{ item_open_url }}"{% endif %} data-kind="{{ item.kind }}" data-item-id="{{ item.id }}" data-parent-id="{{ item.parent_id or '' }}" data-item-name="{{ item.name }}" data-item-display-name="{{ display_name(item.name) }}" data-item-type="{{ 'Folder' if item.kind == 'folder' else clean_file_type(item) }}" data-item-size="{{ display_item_size(item.kind, item.size if item.kind in ['folder', 'event'] else item.file_size) }}" data-item-location="{{ item.location }}" data-item-accessed="{{ format_datetime(item.accessed_at) if item.kind in ['file', 'folder'] and item.accessed_at else '—' }}" data-sort-size="{{ item.size if item.kind == 'folder' else item.file_size }}" data-item-modified="{{ format_datetime(item.date) }}" data-item-date-label="{{ 'Date deleted' if is_trash else 'Created or uploaded' }}" data-item-expiration="{{ trash_days_remaining(item.deleted_at) if is_trash and item.deleted_at else '' }}" data-open-url="{{ item_open_url }}" data-download-url="{{ item_download_url }}" data-copy-url="{{ item_copy_url }}"{% if item.kind == 'folder' and not is_trash %} data-folder-id="{{ item.id }}"{% endif %} data-file-type="{{ 'folder' if item.kind == 'folder' else file_type_key(item) }}" data-modified-date="{{ item.date.isoformat() if item.date else '' }}"{% if item.kind == 'event' %} data-item-icon="{{ item.event_type }}"{% endif %}>
                     {% if not is_public_workspace %}<td class="selection-cell"><input class="item-select" type="checkbox" name="items" value="{{ item.kind }}:{{ item.id }}" aria-label="Select {{ display_name(item.name) }}"></td>{% endif %}
                     <td class="file-name">
-                      {% if item.kind == 'event' %}
+                      {% if section == 'events' and not current_event and not is_event_date_workspace and item.kind == 'event' %}
                       {% if not is_trash %}<a href="{{ item_open_url }}">{% else %}<span>{% endif %}<img class="event-icon-inline" src="{{ url_for('static', filename='images/' ~ event_icon_file(item.event_type)) }}" alt=""> {{ display_name(item.name) }}{% if not is_trash %}</a>{% else %}</span>{% endif %}
                       {% elif item.kind == 'folder' %}
                       {% if not is_trash or is_global_search %}
@@ -573,13 +575,13 @@
               <p style="margin-top: 20px;">Create an Event to start organizing files for this day.</p>
               {% elif current_folder %}
               <h3>This folder is empty</h3>
-              <p style="margin-top: 20px;">Upload files or create folders here to get started.</p>
+              <p style="margin-top: 20px;">{% if is_public_workspace %}There is no public content in this folder.{% else %}Upload files or create folders here to get started.{% endif %}</p>
               {% elif current_event %}
               <h3>This Event is empty</h3>
-              <p style="margin-top: 20px;">Upload files or create folders to organize this Event.</p>
+              <p style="margin-top: 20px;">{% if is_public_workspace %}This Event has no public content yet.{% else %}Upload files or create folders to organize this Event.{% endif %}</p>
               {% elif section == 'events' %}
-              <h3>No Events yet</h3>
-              <p style="margin-top: 20px;">Create an Event to organize its files and folders.</p>
+              <h3>{% if is_public_workspace %}No public Events{% else %}No Events yet{% endif %}</h3>
+              <p style="margin-top: 20px;">{% if is_public_workspace %}Public Events will appear here when available.{% else %}Create an Event to organize its files and folders.{% endif %}</p>
               {% else %}
               <h3>No items here</h3>
               <p style="margin-top: 20px;">You can add files by uploading or dragging them here.</p>
