@@ -2,6 +2,7 @@
 {% block title %}{{ page_title }} | JFCM Library{% endblock %}
 {% block content %}
 {% import "_dashboard_item_macros.html" as dashboard_items with context %}
+{% set is_inside_folder_workspace = current_folder and not is_trash %}
 <div class="storage-shell">
   <aside id="sidebar" class="sidebar" aria-label="Main navigation">
     <a class="brand sidebar-brand" href="{{ url_for('index') }}">
@@ -72,7 +73,7 @@
     {% endif %}
   </aside>
   <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Close navigation" tabindex="-1" hidden></button>
-  <main class="workspace{% if current_folder and not is_trash %} folder-workspace{% endif %}">
+  <main class="workspace{% if is_inside_folder_workspace %} folder-workspace{% endif %}">
     <header class="workspace-header">
       <button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="Open navigation" aria-controls="sidebar" aria-expanded="false">
         <i class="bi bi-list" aria-hidden="true"></i>
@@ -104,7 +105,7 @@
       {% endif %}
       <!-- profile dropdown to display edit profile, sign out... -->
     </header>
-    <div class="workspace-body{% if current_folder and not is_trash %} folder-workspace-body{% endif %}">
+    <div class="workspace-body{% if is_inside_folder_workspace %} folder-workspace-body{% endif %}">
       <div class="workspace-content" data-drop-enabled="{{ 'true' if not is_trash and not is_public_workspace else 'false' }}">
         <section class="workspace-title">
           {% if not is_public_workspace %}<section id="bulk-toolbar" class="bulk-toolbar" hidden>
@@ -157,7 +158,9 @@
             </nav>
             <div class="title-filter workspace-title-content">
               <h1>
-                {% if is_public_workspace %}
+                {% if current_folder %}
+                {{ display_name(current_folder.name) }}
+                {% elif is_public_workspace %}
                 Public Files
                 {% elif is_trash %}
                 Trash
@@ -173,8 +176,6 @@
                 <span class="workspace-event-title"><img class="event-icon-inline" src="{{ url_for('static', filename='images/' ~ event_icon_file(current_event.event_type)) }}" alt=""><span>{{ display_name(current_event.name) }}</span></span>
                 {% elif section == 'events' %}
                 Events
-                {% elif current_folder %}
-                {{ display_name(current_folder.name) }}
                 {% else %}
                 My Files
                 {% endif %}
@@ -380,7 +381,7 @@
               <button id="mobile-select-button" class="button secondary mobile-select-button" type="button" aria-pressed="false"><i class="bi bi-check2-square" aria-hidden="true"></i> Select</button>
             </div>
             {% endif %}
-            {% if current_folder and not is_trash %}
+            {% if is_inside_folder_workspace %}
             {% set folder_groups = namespace(folders=false, presentations=false, images=false, videos=false, documents=false, others=false) %}
             {% for item in items %}
               {% set item_extension = item.name.rsplit('.', 1)[-1]|lower if '.' in item.name else '' %}
@@ -569,6 +570,9 @@
               {% elif is_event_date_workspace %}
               <h3>No Events scheduled for this date</h3>
               <p style="margin-top: 20px;">Create an Event to start organizing files for this day.</p>
+              {% elif current_folder %}
+              <h3>This folder is empty</h3>
+              <p style="margin-top: 20px;">Upload files or create folders here to get started.</p>
               {% elif current_event %}
               <h3>This Event is empty</h3>
               <p style="margin-top: 20px;">Upload files or create folders to organize this Event.</p>

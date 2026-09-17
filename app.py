@@ -1583,6 +1583,10 @@ def dashboard():
             cursor.close()
             node = current_folder
             while node:
+                if section == "events" and node.get("event_id") != event_id:
+                    abort(404)
+                if section != "events" and node.get("event_id") is not None:
+                    abort(404)
                 breadcrumbs.append(node)
                 node = owned_folder(node["parent_id"]) if node["parent_id"] else None
             breadcrumbs.reverse()
@@ -1709,8 +1713,13 @@ def dashboard():
             cursor.execute("SELECT id, name, parent_id FROM folders WHERE user_id = %s AND event_id IS NULL", (session["user_id"],))
         paths = folder_paths(cursor.fetchall())
         cursor.close()
-        items = ([{"kind": "folder", "name": item["name"], "date": item["created_at"], "mime_type": "Folder", "location": paths.get(item["parent_id"], "Library"), **item} for item in folders] +
-                 [{"kind": "file", "name": item["original_filename"], "parent_id": item["folder_id"], "date": item["uploaded_at"], "location": paths.get(item["folder_id"], "Library"), **item} for item in files] +
+        workspace_root_location = (
+            display_name(current_event["name"]) if section == "events" and current_event
+            else "Events" if section == "events"
+            else "Library"
+        )
+        items = ([{"kind": "folder", "name": item["name"], "date": item["created_at"], "mime_type": "Folder", "location": paths.get(item["parent_id"], workspace_root_location), **item} for item in folders] +
+                 [{"kind": "file", "name": item["original_filename"], "parent_id": item["folder_id"], "date": item["uploaded_at"], "location": paths.get(item["folder_id"], workspace_root_location), **item} for item in files] +
                  [{"kind": "event", "parent_id": None, "size": 0, "file_size": 0, "mime_type": "Event", "location": "Events", **item, "date": item["deleted_at"] if deleted else item["event_date"]} for item in (events if (section == "events" and event_id is None) or section == "trash" else [])])
         for item in items:
             location_folder_id = item["parent_id"]
@@ -1725,7 +1734,9 @@ def dashboard():
                 item["location_is_current"] = folder_id == location_folder_id and section in {"files", "events"}
         calendar_context = build_events_calendar_context(calendar_year, calendar_month, dashboard_url_with_updates)
         page_title = "My Files"
-        if current_event:
+        if current_folder:
+            page_title = display_name(current_folder["name"])
+        elif current_event:
             page_title = display_name(current_event["name"])
         elif section == "events":
             page_title = "Events"
@@ -3160,6 +3171,7 @@ def public_folder(share_token):
 
     return render_template(
         "dashboard.html",
+        page_title=display_name(current_folder["name"]),
         items=items,
         total_storage=0,
         total_files=len(items),
@@ -3202,6 +3214,8 @@ def public_event(share_token):
             abort(404)
         node = current_folder
         while node:
+            if node.get("event_id") != event_id or node.get("user_id") != share_context["owner_id"]:
+                abort(404)
             breadcrumbs.append(node)
             node = folder_record(node["parent_id"]) if node["parent_id"] else None
         breadcrumbs.reverse()
@@ -3230,9 +3244,10 @@ def public_event(share_token):
     finally:
         cursor.close()
 
+    event_location = display_name(current_event["name"])
     items = (
-        [{"kind": "folder", "name": item["name"], "date": item["created_at"], "mime_type": "Folder", "location": paths.get(item["parent_id"], "Events"), **item} for item in folders]
-        + [{"kind": "file", "name": item["original_filename"], "parent_id": item["folder_id"], "date": item["uploaded_at"], "location": paths.get(item["folder_id"], "Events"), **item} for item in files]
+        [{"kind": "folder", "name": item["name"], "date": item["created_at"], "mime_type": "Folder", "location": paths.get(item["parent_id"], event_location), **item} for item in folders]
+        + [{"kind": "file", "name": item["original_filename"], "parent_id": item["folder_id"], "date": item["uploaded_at"], "location": paths.get(item["folder_id"], event_location), **item} for item in files]
     )
     for item in items:
         item["location_url"] = ""
@@ -3240,7 +3255,7 @@ def public_event(share_token):
 
     return render_template(
         "dashboard.html",
-        page_title=display_name(current_event["name"]),
+        page_title=display_name(current_folder["name"] if current_folder else current_event["name"]),
         items=items,
         total_storage=0,
         total_files=len(items),
