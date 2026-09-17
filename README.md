@@ -118,13 +118,24 @@ The preview page supports JPEG, PNG, GIF, WEBP, PDF, TXT, MP4, WEBM, MP3, WAV, a
 
 PowerPoint previews are rendered server-side through LibreOffice and PDF into high-resolution slide images. The dashboard displays those finished slide pixels instead of rebuilding the deck in HTML or JavaScript, preserving PowerPoint layout, layering, gradients, transparency, cropping, and slide dimensions as closely as the server's installed fonts allow. The original `.ppt`, `.pptx`, `.pps`, `.ppsx`, or `.odp` upload is never modified and remains the download source.
 
-Install LibreOffice on the application host and make `libreoffice` or `soffice` available on `PATH`, or set `LIBREOFFICE_BINARY` to its executable. At startup the service logs the resolved executable path, or a clear error if no executable is available. `PRESENTATION_PREVIEW_DPI` controls the cached PNG quality (default `192`, clamped to `144`–`300`). Install on Linux, for example, with:
+Install LibreOffice on the application host and make `libreoffice` or `soffice` available on `PATH`, or set `LIBREOFFICE_BINARY` to its executable. At startup the service logs the resolved executable path, or a clear error if no executable is available. `PRESENTATION_PREVIEW_DPI` controls the cached PNG quality (default `240`, clamped to `144`–`360`). Install on Linux, for example, with:
 
 ```sh
 apt-get install libreoffice
 ```
 
-For the closest font match, install the fonts used by uploaded presentations on the server. Rendered previews are cached under `uploads/.presentation-previews`; these derivative files do not replace or alter uploads.
+For the closest font match, install the fonts used by uploaded presentations on the server. The Docker runtime includes open metric-compatible substitutes for common Microsoft fonts and broad Noto coverage. Organization-owned `.ttf` or `.otf` files may be placed in `fonts/` before building, subject to their licenses. Each PPTX is inspected for declared fonts, and the server logs the exact fontconfig match or substitution used. Legacy PPT files are converted to a temporary PPTX only for font inspection; the actual preview still follows the original PPT -> PDF -> PNG path. Rendered previews are cached under `uploads/.presentation-previews`; these derivative files do not replace or alter uploads.
+
+For decks that require Microsoft PowerPoint's exact renderer, export either a PDF or one PNG per slide from PowerPoint and place it in the persistent `POWERPOINT_PRE_RENDERED_FOLDER` (defaults to `uploads/.powerpoint-prerendered`) using one of these layouts:
+
+```text
+<root>/<user_id>/<file_id>.pdf
+<root>/<user_id>/<file_id>/slides.pdf
+<root>/<user_id>/<file_id>/slide-1.png
+<root>/<user_id>/<file_id>/slide-2.png
+```
+
+When present, this export is used as the fidelity fallback. PowerPoint-exported PNG files are copied byte-for-byte; PowerPoint-exported PDFs are rasterized page-for-page through PyMuPDF. The fallback timestamp is included in the preview cache key, so replacing an export refreshes the preview automatically.
 
 Railway is configured through `railway.json` to build the root `Dockerfile` instead of relying on Railpack package propagation. The single-stage runtime image installs LibreOffice as an APT system package, verifies `libreoffice --headless --version` while building, and sets `LIBREOFFICE_BINARY=/usr/bin/libreoffice`. Startup logs show the results of resolving both `libreoffice` and `soffice` from `PATH`. Railway environment variables can still override `LIBREOFFICE_BINARY` in the service settings. The `nixpacks.toml` remains as a fallback for platforms that still use Nixpacks.
 

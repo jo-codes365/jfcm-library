@@ -1302,6 +1302,10 @@ document.addEventListener("DOMContentLoaded", function () {
           var sequence = ++renderSequence;
           var slide = await loadSlide(index);
           if (sequence !== renderSequence) return;
+          var page = Array.isArray(result.pages) ? result.pages[index] : null;
+          var pageWidth = page && (page.page_width_points || page.width) || slide.naturalWidth;
+          var pageHeight = page && (page.page_height_points || page.height) || slide.naturalHeight;
+          if (stage && pageWidth > 0 && pageHeight > 0) stage.style.aspectRatio = pageWidth + " / " + pageHeight;
           canvas.width = slide.naturalWidth;
           canvas.height = slide.naturalHeight;
           context.clearRect(0, 0, canvas.width, canvas.height);
@@ -2669,6 +2673,10 @@ document.addEventListener("DOMContentLoaded", function () {
       }
       async function showSlide(index) {
         var slide = await loadSlide(index);
+        var page = Array.isArray(result.pages) ? result.pages[index] : null;
+        var pageWidth = page && (page.page_width_points || page.width) || slide.naturalWidth;
+        var pageHeight = page && (page.page_height_points || page.height) || slide.naturalHeight;
+        powerpointCanvas.style.aspectRatio = pageWidth + " / " + pageHeight;
         powerpointCanvas.width = slide.naturalWidth;
         powerpointCanvas.height = slide.naturalHeight;
         context.clearRect(0, 0, powerpointCanvas.width, powerpointCanvas.height);

@@ -52,7 +52,13 @@ if not UPLOAD_FOLDER.is_absolute():
     UPLOAD_FOLDER = BASE_DIR / UPLOAD_FOLDER
 UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
 PRESENTATION_PREVIEW_FOLDER = UPLOAD_FOLDER / ".presentation-previews"
-PRESENTATION_PREVIEW_DPI = max(144, min(env_int("PRESENTATION_PREVIEW_DPI", 192), 300))
+PRESENTATION_PREVIEW_DPI = max(144, min(env_int("PRESENTATION_PREVIEW_DPI", 240), 360))
+PRESENTATION_PREVIEW_RENDERER_VERSION = "font-aware-v1"
+PRESENTATION_PRE_RENDERED_FOLDER = Path(
+    os.getenv("POWERPOINT_PRE_RENDERED_FOLDER", str(UPLOAD_FOLDER / ".powerpoint-prerendered"))
+)
+if not PRESENTATION_PRE_RENDERED_FOLDER.is_absolute():
+    PRESENTATION_PRE_RENDERED_FOLDER = BASE_DIR / PRESENTATION_PRE_RENDERED_FOLDER
 
 app = Flask(__name__)
 app.config.update(
@@ -857,15 +863,253 @@ except PresentationPreviewError:
     pass
 
 
+def presentation_fallback_files(record):
+    """Return an optional Microsoft PowerPoint-exported PDF or PNG slide set."""
+    owner_directory = PRESENTATION_PRE_RENDERED_FOLDER / str(int(record["user_id"]))
+    slide_directory = owner_directory / str(int(record["id"]))
+    pdf_candidates = [owner_directory / f"{int(record['id'])}.pdf", slide_directory / "slides.pdf"]
+    for candidate in pdf_candidates:
+        if candidate.is_file():
+            return {"kind": "pdf", "files": [candidate]}
+    if slide_directory.is_dir():
+        def slide_sort_key(path):
+            number = re.search(r"(\d+)$", path.stem)
+            return (0, int(number.group(1))) if number else (1, path.name.casefold())
+
+        slides = sorted(slide_directory.glob("slide-*.png"), key=slide_sort_key)
+        if slides:
+            return {"kind": "png", "files": slides}
+    return None
+
+
+def presentation_fallback_signature(record):
+    fallback = presentation_fallback_files(record)
+    if not fallback:
+        return "none"
+    parts = [fallback["kind"]]
+    for path in fallback["files"]:
+        stat = path.stat()
+        parts.append(f"{path.name}:{stat.st_size}:{stat.st_mtime_ns}")
+    return "|".join(parts)
+
+
+def pptx_font_names(path):
+    """Read explicit and theme Latin/EA/complex-script fonts from an OOXML deck."""
+    import xml.etree.ElementTree as element_tree
+
+    fonts = set()
+    embedded_font_count = 0
+    try:
+        with zipfile.ZipFile(path) as archive:
+            names = [name for name in archive.namelist() if name.startswith("ppt/") and name.endswith(".xml")]
+            embedded_font_count = sum(1 for name in archive.namelist() if name.startswith("ppt/fonts/") and not name.endswith("/"))
+            for name in names:
+                try:
+                    root = element_tree.fromstring(archive.read(name))
+                except (KeyError, element_tree.ParseError):
+                    continue
+                is_theme = name.startswith("ppt/theme/")
+                for element in root.iter():
+                    local_name = element.tag.rsplit("}", 1)[-1]
+                    typeface = element.attrib.get("typeface", "").strip()
+                    if not typeface or typeface.startswith("+"):
+                        continue
+                    if is_theme and local_name not in {"latin", "ea", "cs"}:
+                        continue
+                    fonts.add(typeface)
+    except (OSError, zipfile.BadZipFile) as error:
+        app.logger.warning("Could not inspect presentation fonts in %s: %s", path.name, error)
+    return sorted(fonts, key=str.casefold), embedded_font_count
+
+
+def convert_legacy_presentation_for_font_inspection(source, work_directory, profile_directory):
+    inspection_directory = work_directory / "font-inspection"
+    inspection_directory.mkdir()
+    result = subprocess.run(
+        [
+            libreoffice_binary(),
+            "--headless",
+            "--nologo",
+            "--nodefault",
+            "--nofirststartwizard",
+            f"-env:UserInstallation={profile_directory.resolve().as_uri()}",
+            "--convert-to",
+            "pptx:Impress MS PowerPoint 2007 XML",
+            "--outdir",
+            str(inspection_directory),
+            str(source),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=90,
+        check=False,
+    )
+    converted = list(inspection_directory.glob("*.pptx"))
+    if result.returncode != 0 or not converted:
+        details = (result.stderr or result.stdout or "no diagnostic output").strip()
+        app.logger.warning("Could not create a PPTX copy for legacy PPT font inspection: %s", details)
+        return None
+    return converted[0]
+
+
+def log_presentation_font_report(source, work_directory, profile_directory):
+    inspection_source = source
+    if source.suffix.lower() in {".ppt", ".pps"}:
+        try:
+            inspection_source = convert_legacy_presentation_for_font_inspection(source, work_directory, profile_directory)
+        except (OSError, subprocess.TimeoutExpired) as error:
+            app.logger.warning("Legacy PPT font inspection failed: %s", error)
+            inspection_source = None
+    if not inspection_source or inspection_source.suffix.lower() not in {".pptx", ".ppsx"}:
+        app.logger.warning("Font inspection is unavailable for presentation format %s", source.suffix.lower())
+        return
+
+    fonts, embedded_font_count = pptx_font_names(inspection_source)
+    app.logger.info(
+        "Presentation font inspection: source=%s fonts=%s embedded_font_files=%d",
+        source.name,
+        fonts or "none declared",
+        embedded_font_count,
+    )
+    font_match_binary = shutil.which("fc-match")
+    if not font_match_binary:
+        app.logger.warning("Font substitution diagnostics unavailable because fc-match is not on PATH")
+        return
+    for requested_font in fonts:
+        try:
+            match = subprocess.run(
+                [font_match_binary, "-f", "%{family}|%{file}\n", requested_font],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as error:
+            app.logger.warning("Font lookup failed for %r: %s", requested_font, error)
+            continue
+        matched_line = next((line.strip() for line in match.stdout.splitlines() if line.strip()), "")
+        matched_family, _, matched_file = matched_line.partition("|")
+        requested_key = requested_font.casefold()
+        matched_families = {family.strip().casefold() for family in matched_family.split(",")}
+        if requested_key not in matched_families:
+            app.logger.warning(
+                "Presentation font fallback: requested=%r matched=%r file=%r",
+                requested_font,
+                matched_family or "unknown",
+                matched_file or "unknown",
+            )
+        else:
+            app.logger.info("Presentation font available: requested=%r file=%r", requested_font, matched_file)
+
+
+_FONTCONFIG_SIGNATURE = None
+
+
+def fontconfig_signature():
+    """Fingerprint runtime fonts so a font-layer change invalidates cached slides."""
+    global _FONTCONFIG_SIGNATURE
+    if _FONTCONFIG_SIGNATURE:
+        return _FONTCONFIG_SIGNATURE
+    font_list_binary = shutil.which("fc-list")
+    if not font_list_binary:
+        _FONTCONFIG_SIGNATURE = "fontconfig-unavailable"
+        return _FONTCONFIG_SIGNATURE
+    try:
+        result = subprocess.run(
+            [font_list_binary, "-f", "%{file}|%{family}|%{style}\n"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        catalog = "\n".join(sorted(line.strip() for line in result.stdout.splitlines() if line.strip()))
+        _FONTCONFIG_SIGNATURE = hashlib.sha256(catalog.encode("utf-8")).hexdigest()[:16] if catalog else "empty"
+    except (OSError, subprocess.TimeoutExpired) as error:
+        app.logger.warning("Could not fingerprint the runtime font catalog: %s", error)
+        _FONTCONFIG_SIGNATURE = "fontconfig-error"
+    app.logger.info("Presentation font catalog signature: %s", _FONTCONFIG_SIGNATURE)
+    return _FONTCONFIG_SIGNATURE
+
+
 def presentation_preview_cache(record):
     source = record_path(record)
     if not source.is_file():
         raise PresentationPreviewError("The original presentation is no longer available.")
     stat = source.stat()
     fingerprint = hashlib.sha256(
-        f"{record['stored_filename']}:{stat.st_size}:{stat.st_mtime_ns}:{PRESENTATION_PREVIEW_DPI}".encode("utf-8")
+        (
+            f"{PRESENTATION_PREVIEW_RENDERER_VERSION}:{record['stored_filename']}:{stat.st_size}:"
+            f"{stat.st_mtime_ns}:{PRESENTATION_PREVIEW_DPI}:{fontconfig_signature()}:"
+            f"{presentation_fallback_signature(record)}"
+        ).encode("utf-8")
     ).hexdigest()[:20]
     return PRESENTATION_PREVIEW_FOLDER / str(record["user_id"]) / f"{record['id']}-{fingerprint}"
+
+
+def png_pixel_dimensions(path):
+    with path.open("rb") as image:
+        header = image.read(24)
+    if len(header) != 24 or header[:8] != b"\x89PNG\r\n\x1a\n" or header[12:16] != b"IHDR":
+        raise PresentationPreviewError(f"Pre-rendered slide {path.name} is not a valid PNG image.")
+    return int.from_bytes(header[16:20], "big"), int.from_bytes(header[20:24], "big")
+
+
+def rasterize_presentation_pdf(pdf_path, cache_directory, pymupdf, renderer):
+    document = pymupdf.open(pdf_path)
+    try:
+        if document.page_count < 1:
+            raise PresentationPreviewError("The presentation contains no renderable slides.")
+        slide_names = []
+        page_manifest = []
+        for index, page in enumerate(document):
+            # PyMuPDF rasterizes the complete PDF page in one operation. No
+            # slide element is reconstructed, repositioned, or independently scaled.
+            pixmap = page.get_pixmap(dpi=PRESENTATION_PREVIEW_DPI, alpha=False, annots=True)
+            slide_name = f"slide-{index + 1}.png"
+            temporary_slide = cache_directory / f".{slide_name}.tmp"
+            pixmap.save(str(temporary_slide), output="png")
+            temporary_slide.replace(cache_directory / slide_name)
+            slide_names.append(slide_name)
+            page_manifest.append({
+                "file": slide_name,
+                "width": pixmap.width,
+                "height": pixmap.height,
+                "page_width_points": round(float(page.rect.width), 6),
+                "page_height_points": round(float(page.rect.height), 6),
+            })
+    finally:
+        document.close()
+    return {
+        "slide_count": len(slide_names),
+        "width": page_manifest[0]["width"],
+        "height": page_manifest[0]["height"],
+        "slides": slide_names,
+        "pages": page_manifest,
+        "dpi": PRESENTATION_PREVIEW_DPI,
+        "renderer": renderer,
+    }
+
+
+def copy_prerendered_png_slides(slides, cache_directory):
+    slide_names = []
+    page_manifest = []
+    for index, source_slide in enumerate(slides):
+        width, height = png_pixel_dimensions(source_slide)
+        slide_name = f"slide-{index + 1}.png"
+        temporary_slide = cache_directory / f".{slide_name}.tmp"
+        shutil.copyfile(source_slide, temporary_slide)
+        temporary_slide.replace(cache_directory / slide_name)
+        slide_names.append(slide_name)
+        page_manifest.append({"file": slide_name, "width": width, "height": height})
+    return {
+        "slide_count": len(slide_names),
+        "width": page_manifest[0]["width"],
+        "height": page_manifest[0]["height"],
+        "slides": slide_names,
+        "pages": page_manifest,
+        "dpi": None,
+        "renderer": "microsoft-powerpoint-png-export",
+    }
 
 
 def render_presentation_preview(record):
@@ -893,62 +1137,58 @@ def render_presentation_preview(record):
             profile_directory = work_directory / "libreoffice-profile"
             output_directory = work_directory / "converted"
             output_directory.mkdir()
-            result = subprocess.run(
-                [
-                    libreoffice_binary(),
-                    "--headless",
-                    "--nologo",
-                    "--nodefault",
-                    "--nofirststartwizard",
-                    f"-env:UserInstallation={profile_directory.resolve().as_uri()}",
-                    "--convert-to",
-                    "pdf:impress_pdf_Export",
-                    "--outdir",
-                    str(output_directory),
-                    str(source),
-                ],
-                capture_output=True,
-                text=True,
-                timeout=120,
-                check=False,
-            )
-            pdf_files = list(output_directory.glob("*.pdf"))
-            if result.returncode != 0 or not pdf_files:
-                details = (result.stderr or result.stdout or "LibreOffice did not create a PDF.").strip()
-                app.logger.error("Presentation conversion failed: %s", details)
-                raise PresentationPreviewError("The presentation could not be converted for preview.")
-
-            document = pymupdf.open(pdf_files[0])
-            try:
-                if document.page_count < 1:
-                    raise PresentationPreviewError("The presentation contains no renderable slides.")
-                scale = PRESENTATION_PREVIEW_DPI / 72
-                matrix = pymupdf.Matrix(scale, scale)
-                slide_names = []
-                page_width = page_height = 0
-                for index, page in enumerate(document):
-                    pixmap = page.get_pixmap(matrix=matrix, alpha=True)
-                    slide_name = f"slide-{index + 1}.png"
-                    temporary_slide = cache_directory / f".{slide_name}.tmp"
-                    pixmap.save(str(temporary_slide), output="png")
-                    temporary_slide.replace(cache_directory / slide_name)
-                    slide_names.append(slide_name)
-                    if index == 0:
-                        page_width, page_height = pixmap.width, pixmap.height
-            finally:
-                document.close()
+            fallback = presentation_fallback_files(record)
+            if fallback:
+                app.logger.info(
+                    "Using Microsoft PowerPoint pre-rendered %s fallback for presentation file_id=%s",
+                    fallback["kind"].upper(),
+                    record["id"],
+                )
+                if fallback["kind"] == "pdf":
+                    manifest = rasterize_presentation_pdf(
+                        fallback["files"][0], cache_directory, pymupdf, "microsoft-powerpoint-pdf-export"
+                    )
+                else:
+                    manifest = copy_prerendered_png_slides(fallback["files"], cache_directory)
+            else:
+                log_presentation_font_report(source, work_directory, profile_directory)
+                result = subprocess.run(
+                    [
+                        libreoffice_binary(),
+                        "--headless",
+                        "--nologo",
+                        "--nodefault",
+                        "--nofirststartwizard",
+                        f"-env:UserInstallation={profile_directory.resolve().as_uri()}",
+                        "--convert-to",
+                        "pdf:impress_pdf_Export",
+                        "--outdir",
+                        str(output_directory),
+                        str(source),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                    check=False,
+                )
+                conversion_output = "\n".join(part.strip() for part in (result.stdout, result.stderr) if part.strip())
+                if conversion_output:
+                    app.logger.info("LibreOffice presentation conversion output: %s", conversion_output)
+                pdf_files = list(output_directory.glob("*.pdf"))
+                if result.returncode != 0 or not pdf_files:
+                    details = conversion_output or "LibreOffice did not create a PDF."
+                    app.logger.error("Presentation conversion failed: %s", details)
+                    raise PresentationPreviewError(
+                        "The presentation could not be converted for preview. "
+                        "A Microsoft PowerPoint-exported PDF or PNG fallback can be configured."
+                    )
+                manifest = rasterize_presentation_pdf(pdf_files[0], cache_directory, pymupdf, "libreoffice-pdf")
     except subprocess.TimeoutExpired as error:
         raise PresentationPreviewError("The presentation preview took too long to render.") from error
     except OSError as error:
         app.logger.exception("Presentation preview renderer error")
         raise PresentationPreviewError("The presentation preview renderer could not be started.") from error
 
-    manifest = {
-        "slide_count": len(slide_names),
-        "width": page_width,
-        "height": page_height,
-        "slides": slide_names,
-    }
     temporary_manifest = cache_directory / ".manifest.json.tmp"
     temporary_manifest.write_text(json.dumps(manifest), encoding="utf-8")
     temporary_manifest.replace(manifest_path)
@@ -2344,6 +2584,9 @@ def presentation_preview_manifest(file_id):
         "slide_count": manifest["slide_count"],
         "width": manifest["width"],
         "height": manifest["height"],
+        "pages": manifest.get("pages", []),
+        "dpi": manifest.get("dpi"),
+        "renderer": manifest.get("renderer", "libreoffice-pdf"),
         "slides": [
             url_for("presentation_preview_slide", file_id=file_id, slide_number=index, **params)
             for index in range(1, manifest["slide_count"] + 1)
