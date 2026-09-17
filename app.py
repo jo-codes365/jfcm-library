@@ -1,8 +1,13 @@
+import hashlib
+import json
 import logging
 import os
 import re
 import secrets
+import shutil
 import smtplib
+import subprocess
+import tempfile
 import uuid
 import zipfile
 import calendar as calendar_module
@@ -46,6 +51,8 @@ UPLOAD_FOLDER = Path(os.getenv("UPLOAD_FOLDER", "uploads"))
 if not UPLOAD_FOLDER.is_absolute():
     UPLOAD_FOLDER = BASE_DIR / UPLOAD_FOLDER
 UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
+PRESENTATION_PREVIEW_FOLDER = UPLOAD_FOLDER / ".presentation-previews"
+PRESENTATION_PREVIEW_DPI = max(144, min(env_int("PRESENTATION_PREVIEW_DPI", 192), 300))
 
 app = Flask(__name__)
 app.config.update(
@@ -213,8 +220,18 @@ def delete_physical_file(owner_id, stored_filename):
         path.unlink()
 
 
+def delete_presentation_previews(owner_id, file_id):
+    owner_preview_directory = PRESENTATION_PREVIEW_FOLDER / str(int(owner_id))
+    if not owner_preview_directory.is_dir():
+        return
+    for cache_directory in owner_preview_directory.glob(f"{int(file_id)}-*"):
+        if cache_directory.is_dir() and cache_directory.parent == owner_preview_directory:
+            shutil.rmtree(cache_directory)
+
+
 def permanently_delete_file_record(cursor, record):
     delete_physical_file(record["user_id"], record["stored_filename"])
+    delete_presentation_previews(record["user_id"], record["id"])
     cursor.execute("DELETE FROM files WHERE id = %s AND user_id = %s", (record["id"], record["user_id"]))
 
 
@@ -227,6 +244,7 @@ def permanently_delete_folder_record(cursor, folder):
     )
     for record in cursor.fetchall():
         delete_physical_file(record["user_id"], record["stored_filename"])
+        delete_presentation_previews(record["user_id"], record["id"])
     cursor.execute(f"DELETE FROM files WHERE user_id = %s AND folder_id IN ({placeholders})", (folder["user_id"], *folder_ids))
     cursor.execute(f"UPDATE folders SET parent_id = NULL WHERE user_id = %s AND id IN ({placeholders})", (folder["user_id"], *folder_ids))
     cursor.execute(f"DELETE FROM folders WHERE user_id = %s AND id IN ({placeholders})", (folder["user_id"], *folder_ids))
@@ -236,6 +254,7 @@ def permanently_delete_event_record(cursor, event):
     cursor.execute("SELECT id, user_id, stored_filename FROM files WHERE user_id = %s AND event_id = %s", (event["user_id"], event["id"]))
     for record in cursor.fetchall():
         delete_physical_file(record["user_id"], record["stored_filename"])
+        delete_presentation_previews(record["user_id"], record["id"])
     cursor.execute("DELETE FROM files WHERE user_id = %s AND event_id = %s", (event["user_id"], event["id"]))
     cursor.execute("UPDATE folders SET parent_id = NULL WHERE user_id = %s AND event_id = %s", (event["user_id"], event["id"]))
     cursor.execute("DELETE FROM folders WHERE user_id = %s AND event_id = %s", (event["user_id"], event["id"]))
@@ -772,6 +791,139 @@ def record_path(record):
     if stored_name != Path(stored_name).name:
         abort(404)
     return user_directory(record["user_id"]) / stored_name
+
+
+class PresentationPreviewError(RuntimeError):
+    pass
+
+
+def libreoffice_binary():
+    configured = os.getenv("LIBREOFFICE_BINARY", "").strip()
+    candidates = [configured] if configured else []
+    candidates.extend(["soffice", "libreoffice"])
+    if os.name == "nt":
+        candidates.extend([
+            r"C:\Program Files\LibreOffice\program\soffice.exe",
+            r"C:\Program Files (x86)\LibreOffice\program\soffice.exe",
+        ])
+    for candidate in candidates:
+        if not candidate:
+            continue
+        resolved = shutil.which(candidate)
+        if resolved:
+            return resolved
+        if Path(candidate).is_file():
+            return candidate
+    raise PresentationPreviewError(
+        "The presentation renderer is not installed. Install LibreOffice or set LIBREOFFICE_BINARY."
+    )
+
+
+def presentation_preview_cache(record):
+    source = record_path(record)
+    if not source.is_file():
+        raise PresentationPreviewError("The original presentation is no longer available.")
+    stat = source.stat()
+    fingerprint = hashlib.sha256(
+        f"{record['stored_filename']}:{stat.st_size}:{stat.st_mtime_ns}:{PRESENTATION_PREVIEW_DPI}".encode("utf-8")
+    ).hexdigest()[:20]
+    return PRESENTATION_PREVIEW_FOLDER / str(record["user_id"]) / f"{record['id']}-{fingerprint}"
+
+
+def render_presentation_preview(record):
+    """Render via LibreOffice/PDF so the browser only scales finished slide pixels."""
+    cache_directory = presentation_preview_cache(record)
+    manifest_path = cache_directory / "manifest.json"
+    if manifest_path.is_file():
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            if manifest.get("slide_count") and all((cache_directory / name).is_file() for name in manifest.get("slides", [])):
+                return cache_directory, manifest
+        except (OSError, ValueError, TypeError):
+            pass
+
+    source = record_path(record)
+    cache_directory.mkdir(parents=True, exist_ok=True)
+    try:
+        import pymupdf
+    except ImportError as error:
+        raise PresentationPreviewError("The PDF image renderer is not installed.") from error
+
+    try:
+        with tempfile.TemporaryDirectory(prefix="jfcm-presentation-") as temporary:
+            work_directory = Path(temporary)
+            profile_directory = work_directory / "libreoffice-profile"
+            output_directory = work_directory / "converted"
+            output_directory.mkdir()
+            result = subprocess.run(
+                [
+                    libreoffice_binary(),
+                    "--headless",
+                    "--nologo",
+                    "--nodefault",
+                    "--nofirststartwizard",
+                    f"-env:UserInstallation={profile_directory.resolve().as_uri()}",
+                    "--convert-to",
+                    "pdf:impress_pdf_Export",
+                    "--outdir",
+                    str(output_directory),
+                    str(source),
+                ],
+                capture_output=True,
+                text=True,
+                timeout=120,
+                check=False,
+            )
+            pdf_files = list(output_directory.glob("*.pdf"))
+            if result.returncode != 0 or not pdf_files:
+                details = (result.stderr or result.stdout or "LibreOffice did not create a PDF.").strip()
+                app.logger.error("Presentation conversion failed: %s", details)
+                raise PresentationPreviewError("The presentation could not be converted for preview.")
+
+            document = pymupdf.open(pdf_files[0])
+            try:
+                if document.page_count < 1:
+                    raise PresentationPreviewError("The presentation contains no renderable slides.")
+                scale = PRESENTATION_PREVIEW_DPI / 72
+                matrix = pymupdf.Matrix(scale, scale)
+                slide_names = []
+                page_width = page_height = 0
+                for index, page in enumerate(document):
+                    pixmap = page.get_pixmap(matrix=matrix, alpha=True)
+                    slide_name = f"slide-{index + 1}.png"
+                    temporary_slide = cache_directory / f".{slide_name}.tmp"
+                    pixmap.save(str(temporary_slide), output="png")
+                    temporary_slide.replace(cache_directory / slide_name)
+                    slide_names.append(slide_name)
+                    if index == 0:
+                        page_width, page_height = pixmap.width, pixmap.height
+            finally:
+                document.close()
+    except subprocess.TimeoutExpired as error:
+        raise PresentationPreviewError("The presentation preview took too long to render.") from error
+    except OSError as error:
+        app.logger.exception("Presentation preview renderer error")
+        raise PresentationPreviewError("The presentation preview renderer could not be started.") from error
+
+    manifest = {
+        "slide_count": len(slide_names),
+        "width": page_width,
+        "height": page_height,
+        "slides": slide_names,
+    }
+    temporary_manifest = cache_directory / ".manifest.json.tmp"
+    temporary_manifest.write_text(json.dumps(manifest), encoding="utf-8")
+    temporary_manifest.replace(manifest_path)
+    return cache_directory, manifest
+
+
+def presentation_share_params(share_context):
+    if not share_context:
+        return {}
+    return {
+        "share_context_kind": share_context["kind"],
+        "share_context_token": share_context["token"],
+    }
 
 
 FILE_TYPE_DEFINITIONS = (
@@ -1837,6 +1989,16 @@ def offline_manifest(kind, item_id):
             url_for("preview_content", file_id=file_id, **context_params),
             url_for("download", file_id=file_id, **context_params),
         ])
+        if preview_kind(file_record) == "powerpoint":
+            urls.append(url_for("presentation_preview_manifest", file_id=file_id, **context_params))
+            try:
+                _cache_directory, presentation_manifest = render_presentation_preview(file_record)
+                urls.extend(
+                    url_for("presentation_preview_slide", file_id=file_id, slide_number=index, **context_params)
+                    for index in range(1, presentation_manifest["slide_count"] + 1)
+                )
+            except PresentationPreviewError:
+                app.logger.warning("Presentation %s could not be added to the offline preview cache", file_id)
 
     # Cache the root download as well as its browsable contents so both the
     # table action and the overflow menu continue to work without a network.
@@ -1850,12 +2012,6 @@ def offline_manifest(kind, item_id):
     item_size = int(root.get("file_size") or 0) if kind == "file" else sum(int(file_record.get("file_size") or 0) for file_record in files)
 
     preview_kinds = {preview_kind(file_record) for file_record in files}
-    if "powerpoint" in preview_kinds:
-        urls.extend([
-            "https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js",
-            "https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js",
-            "https://cdn.jsdelivr.net/npm/pptxviewjs/dist/PptxViewJS.min.js",
-        ])
     if "spreadsheet" in preview_kinds:
         urls.append("https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js")
 
@@ -1983,6 +2139,62 @@ def preview_content(file_id):
     )
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Content-Security-Policy"] = "sandbox"
+    return response
+
+
+@app.get("/presentation-preview/<int:file_id>/manifest")
+@login_or_public_link_required
+def presentation_preview_manifest(file_id):
+    share_context = request_share_context()
+    try:
+        record = accessible_file(file_id, share_context=share_context)
+    except MySQLError:
+        app.logger.exception("Presentation preview database error")
+        return jsonify({"ok": False, "error": "The presentation preview is temporarily unavailable."}), 500
+    if not record or preview_kind(record) != "powerpoint":
+        abort(404)
+    try:
+        _cache_directory, manifest = render_presentation_preview(record)
+    except PresentationPreviewError as error:
+        return jsonify({"ok": False, "error": str(error)}), 503
+    params = presentation_share_params(share_context)
+    return jsonify({
+        "ok": True,
+        "slide_count": manifest["slide_count"],
+        "width": manifest["width"],
+        "height": manifest["height"],
+        "slides": [
+            url_for("presentation_preview_slide", file_id=file_id, slide_number=index, **params)
+            for index in range(1, manifest["slide_count"] + 1)
+        ],
+    })
+
+
+@app.get("/presentation-preview/<int:file_id>/slide/<int:slide_number>")
+@login_or_public_link_required
+def presentation_preview_slide(file_id, slide_number):
+    share_context = request_share_context()
+    try:
+        record = accessible_file(file_id, share_context=share_context)
+    except MySQLError:
+        app.logger.exception("Presentation slide database error")
+        abort(500)
+    if not record or preview_kind(record) != "powerpoint":
+        abort(404)
+    try:
+        cache_directory, manifest = render_presentation_preview(record)
+    except PresentationPreviewError:
+        abort(503)
+    if slide_number < 1 or slide_number > manifest["slide_count"]:
+        abort(404)
+    response = send_from_directory(
+        cache_directory,
+        manifest["slides"][slide_number - 1],
+        mimetype="image/png",
+        conditional=True,
+        max_age=86400,
+    )
+    response.headers["X-Content-Type-Options"] = "nosniff"
     return response
 
 

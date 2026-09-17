@@ -116,7 +116,15 @@ mysql -u root -p file_storage < schema_upgrade_preview.sql
 
 The preview page supports JPEG, PNG, GIF, WEBP, PDF, TXT, MP4, WEBM, MP3, WAV, and OGG. Copy Link creates a random-token URL, but it remains protected: the signed-in owner must still match the file owner. This design permits an explicit public-sharing option to be added later without exposing storage paths.
 
-PowerPoint preview supports `.pptx` in the browser with the client-side PptxViewJS parser. It fetches the original file only through the authenticated preview-content route and does not convert, change, or save a second version of the uploaded file. Legacy binary `.ppt` files use the same PowerPoint-only branch but show Preview unavailable because the browser parser supports the Open XML `.pptx` format.
+PowerPoint previews are rendered server-side through LibreOffice and PDF into high-resolution slide images. The dashboard displays those finished slide pixels instead of rebuilding the deck in HTML or JavaScript, preserving PowerPoint layout, layering, gradients, transparency, cropping, and slide dimensions as closely as the server's installed fonts allow. The original `.ppt`, `.pptx`, `.pps`, `.ppsx`, or `.odp` upload is never modified and remains the download source.
+
+Install LibreOffice on the application host and make `soffice` available on `PATH`, or set `LIBREOFFICE_BINARY` to its executable. `PRESENTATION_PREVIEW_DPI` controls the cached PNG quality (default `192`, clamped to `144`–`300`). Install on Linux, for example, with:
+
+```sh
+apt-get install libreoffice
+```
+
+For the closest font match, install the fonts used by uploaded presentations on the server. Rendered previews are cached under `uploads/.presentation-previews`; these derivative files do not replace or alter uploads.
 
 ## Event sharing migration for an existing database
 

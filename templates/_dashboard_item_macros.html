@@ -62,11 +62,13 @@ data-kind="{{ item.kind }}" data-item-id="{{ item.id }}" data-parent-id="{{ item
     {% set download_url = url_for('download', file_id=item.id, share_context_kind=share_context.kind, share_context_token=share_context.token) if item.kind == 'file' else url_for('download_folder', folder_id=item.id, share_context_kind=share_context.kind, share_context_token=share_context.token) %}
     {% set offline_url = url_for('offline_manifest', kind=item.kind, item_id=item.id, share_context_kind=share_context.kind, share_context_token=share_context.token) %}
     {% set content_url = url_for('preview_content', file_id=item.id, share_context_kind=share_context.kind, share_context_token=share_context.token) if item.kind == 'file' else '' %}
+    {% set presentation_manifest_url = url_for('presentation_preview_manifest', file_id=item.id, share_context_kind=share_context.kind, share_context_token=share_context.token) if item.kind == 'file' else '' %}
   {% else %}
     {% set open_url = url_for('dashboard', section='events', event=event_id, folder=item.id) if item.kind == 'folder' and section == 'events' else url_for('dashboard', folder=item.id) if item.kind == 'folder' else url_for('preview', file_id=item.id) %}
     {% set download_url = url_for('download_folder', folder_id=item.id) if item.kind == 'folder' else url_for('download', file_id=item.id) %}
     {% set offline_url = url_for('offline_manifest', kind=item.kind, item_id=item.id) %}
     {% set content_url = url_for('preview_content', file_id=item.id) if item.kind == 'file' else '' %}
+    {% set presentation_manifest_url = url_for('presentation_preview_manifest', file_id=item.id) if item.kind == 'file' else '' %}
   {% endif %}
   {% set copy_url = url_for('token_preview', share_token=item.share_token, _external=true) if item.kind == 'file' and item.share_token else url_for('public_event', share_token=current_event.share_token, folder=item.id, _external=true) if item.kind == 'folder' and current_event and current_event.share_token else url_for('public_folder', share_token=item.share_token, _external=true) if item.kind == 'folder' and item.share_token else '' %}
 <article class="workspace-item folder-content-card folder-content-card--{{ card_kind }}{% if item.kind == 'file' and card_kind != 'presentation' %} previewable-row{% endif %}"{% if item.kind == 'file' and card_kind != 'presentation' %} data-preview-url="{{ open_url }}"{% endif %} {{ item_attributes(item, open_url, download_url, copy_url) }}>
@@ -94,7 +96,7 @@ data-kind="{{ item.kind }}" data-item-id="{{ item.id }}" data-parent-id="{{ item
       <div class="actions">{{ action_buttons(item, download_url, offline_url) }}</div>
     </div>
   </header>
-  <div class="inline-presentation-preview" data-inline-powerpoint-preview data-content-url="{{ content_url }}" data-extension="{{ item.name.rsplit('.', 1)[-1]|lower if '.' in item.name else '' }}" data-filename="{{ display_name(item.name) }}">
+  <div class="inline-presentation-preview" data-inline-powerpoint-preview data-manifest-url="{{ presentation_manifest_url }}" data-extension="{{ item.name.rsplit('.', 1)[-1]|lower if '.' in item.name else '' }}" data-filename="{{ display_name(item.name) }}">
     <div class="inline-presentation-stage">
       <canvas data-powerpoint-canvas aria-label="Slide preview for {{ display_name(item.name) }}"></canvas>
       <p data-powerpoint-message>Loading presentation preview...</p>

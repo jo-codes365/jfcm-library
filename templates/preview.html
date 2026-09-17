@@ -265,7 +265,7 @@
           </audio>
         </div>
       {% elif preview_kind == 'powerpoint' %}
-        <div id="powerpoint-preview" class="powerpoint-preview" data-content-url="{{ url_for('preview_content', file_id=file.id, share_context_kind=share_context.kind, share_context_token=share_context.token) if share_context else url_for('preview_content', file_id=file.id) }}" data-extension="{{ file.original_filename.rsplit('.', 1)[-1]|lower if '.' in file.original_filename else '' }}">
+        <div id="powerpoint-preview" class="powerpoint-preview" data-manifest-url="{{ url_for('presentation_preview_manifest', file_id=file.id, share_context_kind=share_context.kind, share_context_token=share_context.token) if share_context else url_for('presentation_preview_manifest', file_id=file.id) }}">
           <canvas id="powerpoint-canvas" aria-label="PowerPoint slide preview"></canvas>
           <div class="powerpoint-controls">
             <button id="powerpoint-previous" class="button secondary small" type="button" disabled>Previous</button>
@@ -384,11 +384,7 @@
 </div>
 {% endblock %}
 {% block page_scripts %}
-{% if preview_kind == 'powerpoint' %}
-<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/pptxviewjs/dist/PptxViewJS.min.js"></script>
-{% elif preview_kind == 'spreadsheet' %}
+{% if preview_kind == 'spreadsheet' %}
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {

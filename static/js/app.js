@@ -998,31 +998,6 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
   initializeFolderCarousels(document);
-  var powerpointViewerLoader = null;
-  function loadPresentationScript(source, ready) {
-    if (ready()) return Promise.resolve();
-    return new Promise(function (resolve, reject) {
-      var absoluteSource = new URL(source, document.baseURI).href;
-      var script = Array.from(document.scripts).find(function (candidate) { return candidate.src === absoluteSource; });
-      if (!script) {
-        script = document.createElement("script");
-        script.src = source;
-        script.async = true;
-        document.head.appendChild(script);
-      }
-      script.addEventListener("load", function () { ready() ? resolve() : reject(new Error("Presentation dependency unavailable")); }, { once: true });
-      script.addEventListener("error", function () { reject(new Error("Presentation dependency failed to load")); }, { once: true });
-    });
-  }
-  function ensurePowerpointViewer() {
-    if (window.PptxViewJS) return Promise.resolve();
-    if (!powerpointViewerLoader) {
-      powerpointViewerLoader = loadPresentationScript("https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js", function () { return Boolean(window.JSZip); })
-        .then(function () { return loadPresentationScript("https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js", function () { return Boolean(window.Chart); }); })
-        .then(function () { return loadPresentationScript("https://cdn.jsdelivr.net/npm/pptxviewjs/dist/PptxViewJS.min.js", function () { return Boolean(window.PptxViewJS); }); });
-    }
-    return powerpointViewerLoader;
-  }
   function initializeInlinePowerpointPreviews(root) {
     (root || document).querySelectorAll("[data-inline-powerpoint-preview]").forEach(function (preview) {
       if (preview.dataset.powerpointInitialized === "true") return;
@@ -1043,42 +1018,62 @@ document.addEventListener("DOMContentLoaded", function () {
         previous.disabled = true;
         next.disabled = true;
       }
-      ensurePowerpointViewer().then(function () {
-        return fetch(preview.dataset.contentUrl);
-      }).then(function (response) {
-        if (!response.ok) throw new Error("Presentation request failed");
-        return response.blob();
-      }).then(async function (blob) {
-        var presentationFile = new File([blob], preview.dataset.filename || "presentation." + preview.dataset.extension, { type: blob.type });
-        var viewer = new window.PptxViewJS.PPTXViewer({ canvas: canvas });
-        await viewer.loadFile(presentationFile);
-        await viewer.render();
-        canvas.classList.add("is-ready");
-        message.hidden = true;
+      fetch(preview.dataset.manifestUrl, { credentials: "same-origin" }).then(async function (response) {
+        var result = await response.json().catch(function () { return {}; });
+        if (!response.ok || !result.ok || !Array.isArray(result.slides) || !result.slides.length) {
+          throw new Error(result.error || "This presentation could not be rendered.");
+        }
+        if (stage && result.width > 0 && result.height > 0) {
+          stage.style.aspectRatio = result.width + " / " + result.height;
+        }
+        var context = canvas.getContext("2d", { alpha: true });
+        var images = new Array(result.slides.length);
+        var currentIndex = 0;
+        var renderSequence = 0;
+        function loadSlide(index) {
+          if (images[index]) return Promise.resolve(images[index]);
+          return new Promise(function (resolve, reject) {
+            var slide = new Image();
+            slide.decoding = "async";
+            slide.onload = function () { images[index] = slide; resolve(slide); };
+            slide.onerror = function () { reject(new Error("A rendered slide could not be loaded.")); };
+            slide.src = result.slides[index];
+          });
+        }
+        async function showSlide(index) {
+          var sequence = ++renderSequence;
+          var slide = await loadSlide(index);
+          if (sequence !== renderSequence) return;
+          canvas.width = slide.naturalWidth;
+          canvas.height = slide.naturalHeight;
+          context.clearRect(0, 0, canvas.width, canvas.height);
+          context.drawImage(slide, 0, 0);
+          currentIndex = index;
+          canvas.classList.add("is-ready");
+          message.hidden = true;
+          updateControls();
+          if (index + 1 < result.slides.length) loadSlide(index + 1).catch(function () {});
+        }
         function updateControls() {
-          var current = viewer.getCurrentSlideIndex() + 1;
-          var total = viewer.getSlideCount();
-          status.textContent = "Page " + current + " of " + total;
-          previous.disabled = current <= 1;
-          next.disabled = current >= total;
+          status.textContent = "Page " + (currentIndex + 1) + " of " + result.slides.length;
+          previous.disabled = currentIndex <= 0;
+          next.disabled = currentIndex >= result.slides.length - 1;
         }
         previous.addEventListener("click", async function () {
           previous.disabled = true;
           next.disabled = true;
-          await viewer.previousSlide();
-          updateControls();
+          try { await showSlide(Math.max(0, currentIndex - 1)); }
+          catch (error) { unavailable(error.message); }
         });
         next.addEventListener("click", async function () {
           previous.disabled = true;
           next.disabled = true;
-          await viewer.nextSlide();
-          updateControls();
+          try { await showSlide(Math.min(result.slides.length - 1, currentIndex + 1)); }
+          catch (error) { unavailable(error.message); }
         });
-        updateControls();
-      }).catch(function () {
-        unavailable(preview.dataset.extension === "ppt"
-          ? "Inline preview is unavailable for this legacy .ppt file. Use Open / Preview or download the original file."
-          : "This presentation could not be rendered. Use Open / Preview or download the original file.");
+        await showSlide(0);
+      }).catch(function (error) {
+        unavailable((error && error.message ? error.message : "This presentation could not be rendered.") + " Download the original file to view it.");
       });
     });
   }
@@ -2353,7 +2348,6 @@ document.addEventListener("DOMContentLoaded", function () {
     var previousSlide = document.getElementById("powerpoint-previous");
     var nextSlide = document.getElementById("powerpoint-next");
     var powerpointCanvas = document.getElementById("powerpoint-canvas");
-    var extension = powerpointPreview.dataset.extension;
     function powerpointUnavailable(message) {
       powerpointPreview.classList.add("powerpoint-unavailable");
       powerpointCanvas.hidden = true;
@@ -2361,32 +2355,43 @@ document.addEventListener("DOMContentLoaded", function () {
       nextSlide.hidden = true;
       powerpointStatus.textContent = message + " Download the original file to view it.";
     }
-    if (extension !== "pptx") {
-      powerpointUnavailable("Preview unavailable for legacy .ppt files in this browser.");
-    } else if (!window.PptxViewJS) {
-      powerpointUnavailable("PowerPoint viewer could not be loaded.");
-    } else {
-      fetch(powerpointPreview.dataset.contentUrl).then(function (response) {
-        if (!response.ok) throw new Error("PowerPoint request failed");
-        return response.blob();
-      }).then(async function (blob) {
-        var file = new File([blob], "presentation.pptx", { type: blob.type });
-        var viewer = new window.PptxViewJS.PPTXViewer({ canvas: powerpointCanvas });
-        await viewer.loadFile(file);
-        await viewer.render();
+    fetch(powerpointPreview.dataset.manifestUrl, { credentials: "same-origin" }).then(async function (response) {
+      var result = await response.json().catch(function () { return {}; });
+      if (!response.ok || !result.ok || !Array.isArray(result.slides) || !result.slides.length) {
+        throw new Error(result.error || "PowerPoint preview could not be rendered.");
+      }
+      var context = powerpointCanvas.getContext("2d", { alpha: true });
+      var images = new Array(result.slides.length);
+      var currentIndex = 0;
+      function loadSlide(index) {
+        if (images[index]) return Promise.resolve(images[index]);
+        return new Promise(function (resolve, reject) {
+          var slide = new Image();
+          slide.decoding = "async";
+          slide.onload = function () { images[index] = slide; resolve(slide); };
+          slide.onerror = function () { reject(new Error("A rendered slide could not be loaded.")); };
+          slide.src = result.slides[index];
+        });
+      }
+      async function showSlide(index) {
+        var slide = await loadSlide(index);
+        powerpointCanvas.width = slide.naturalWidth;
+        powerpointCanvas.height = slide.naturalHeight;
+        context.clearRect(0, 0, powerpointCanvas.width, powerpointCanvas.height);
+        context.drawImage(slide, 0, 0);
+        currentIndex = index;
         function updateSlideControls() {
-          var current = viewer.getCurrentSlideIndex() + 1;
-          var total = viewer.getSlideCount();
-          powerpointStatus.textContent = "Slide " + current + " of " + total;
-          previousSlide.disabled = current <= 1;
-          nextSlide.disabled = current >= total;
+          powerpointStatus.textContent = "Slide " + (currentIndex + 1) + " of " + result.slides.length;
+          previousSlide.disabled = currentIndex <= 0;
+          nextSlide.disabled = currentIndex >= result.slides.length - 1;
         }
-        previousSlide.addEventListener("click", async function () { await viewer.previousSlide(); updateSlideControls(); });
-        nextSlide.addEventListener("click", async function () { await viewer.nextSlide(); updateSlideControls(); });
         updateSlideControls();
-      }).catch(function () {
-        powerpointUnavailable("PowerPoint preview could not be rendered.");
-      });
-    }
+      }
+      previousSlide.addEventListener("click", function () { showSlide(Math.max(0, currentIndex - 1)).catch(function (error) { powerpointUnavailable(error.message); }); });
+      nextSlide.addEventListener("click", function () { showSlide(Math.min(result.slides.length - 1, currentIndex + 1)).catch(function (error) { powerpointUnavailable(error.message); }); });
+      await showSlide(0);
+    }).catch(function (error) {
+      powerpointUnavailable(error && error.message ? error.message : "PowerPoint preview could not be rendered.");
+    });
   }
 });
