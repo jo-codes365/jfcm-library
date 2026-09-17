@@ -3942,7 +3942,7 @@ body.presentation-fullscreen-fallback-active {
     transform: none;
   }
   .folder-content-card--image .card-item-select + .image-card-header {
-    padding-left: 12px;
+    padding-left: 0;
   }
   .file-workspace.mobile-select-mode .folder-content-card--image .card-item-select + .image-card-header {
     padding-left: 38px;
@@ -3977,7 +3977,17 @@ body.presentation-fullscreen-fallback-active {
     z-index: 4;
     inset: 0;
     display: block;
+    opacity: 1;
+    visibility: visible;
     pointer-events: none;
+    transition: opacity .18s ease, visibility 0s linear 0s;
+  }
+  .inline-presentation-stage.presentation-controls-hidden:fullscreen .presentation-fullscreen-controls,
+  .inline-presentation-stage.presentation-controls-hidden:-webkit-full-screen .presentation-fullscreen-controls,
+  .inline-presentation-stage.is-presentation-fullscreen-fallback.presentation-controls-hidden .presentation-fullscreen-controls {
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity .18s ease, visibility 0s linear .18s;
   }
   .inline-presentation-stage:fullscreen,
   .inline-presentation-stage:-webkit-full-screen,
@@ -4021,6 +4031,14 @@ body.presentation-fullscreen-fallback-active {
   }
   .presentation-fullscreen-next {
     right: max(10px, env(safe-area-inset-right));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .presentation-fullscreen-controls,
+  .inline-presentation-stage.presentation-controls-hidden:fullscreen .presentation-fullscreen-controls,
+  .inline-presentation-stage.presentation-controls-hidden:-webkit-full-screen .presentation-fullscreen-controls,
+  .inline-presentation-stage.is-presentation-fullscreen-fallback.presentation-controls-hidden .presentation-fullscreen-controls {
+    transition: none;
   }
 }
 .download-action:hover {

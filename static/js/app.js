@@ -1316,14 +1316,45 @@ document.addEventListener("DOMContentLoaded", function () {
       var fullscreenPrevious = preview.querySelector("[data-powerpoint-fullscreen-previous]");
       var fullscreenNext = preview.querySelector("[data-powerpoint-fullscreen-next]");
       var fullscreenExit = preview.querySelector("[data-powerpoint-fullscreen-exit]");
+      var fullscreenControls = preview.querySelector(".presentation-fullscreen-controls");
+      var fullscreenControlsTimer = null;
+      var suppressFullscreenStageClick = false;
       if (!canvas || !message || !status || !previous || !next) return;
       preview.classList.add("is-powerpoint-loading");
       preview.setAttribute("aria-busy", "true");
       if (!preview.hasAttribute("tabindex")) preview.tabIndex = 0;
       if (stage && !stage.hasAttribute("tabindex")) stage.tabIndex = -1;
+      function clearFullscreenControlsTimer() {
+        if (fullscreenControlsTimer) window.clearTimeout(fullscreenControlsTimer);
+        fullscreenControlsTimer = null;
+      }
+      function hideFullscreenControls() {
+        clearFullscreenControlsTimer();
+        if (stage) stage.classList.add("presentation-controls-hidden");
+      }
+      function showFullscreenControls() {
+        clearFullscreenControlsTimer();
+        if (!stage || activePresentationFullscreenElement() !== stage || !isMobilePresentationViewport()) return;
+        stage.classList.remove("presentation-controls-hidden");
+        fullscreenControlsTimer = window.setTimeout(hideFullscreenControls, 2500);
+      }
+      if (stage) {
+        stage.addEventListener("presentation-fullscreen-enter", showFullscreenControls);
+        stage.addEventListener("presentation-fullscreen-exit", function () {
+          clearFullscreenControlsTimer();
+          stage.classList.remove("presentation-controls-hidden");
+        });
+      }
       if (stage) stage.addEventListener("click", function (event) {
         event.stopPropagation();
         preview.focus({ preventScroll: true });
+        if (activePresentationFullscreenElement() !== stage || !isMobilePresentationViewport()) return;
+        if (suppressFullscreenStageClick) {
+          suppressFullscreenStageClick = false;
+          return;
+        }
+        if (stage.classList.contains("presentation-controls-hidden")) showFullscreenControls();
+        else hideFullscreenControls();
       });
       preview.addEventListener("keydown", function (event) {
         var navigationButton = event.key === "ArrowLeft" || event.key === "ArrowUp"
@@ -1338,15 +1369,22 @@ document.addEventListener("DOMContentLoaded", function () {
       });
       if (fullscreenPrevious) fullscreenPrevious.addEventListener("click", function (event) {
         event.stopPropagation();
+        showFullscreenControls();
         if (!previous.disabled) previous.click();
       });
       if (fullscreenNext) fullscreenNext.addEventListener("click", function (event) {
         event.stopPropagation();
+        showFullscreenControls();
         if (!next.disabled) next.click();
       });
       if (fullscreenExit) fullscreenExit.addEventListener("click", function (event) {
         event.stopPropagation();
+        showFullscreenControls();
         exitPresentationFullscreen().catch(function () {});
+      });
+      if (fullscreenControls) fullscreenControls.addEventListener("pointerdown", function (event) {
+        event.stopPropagation();
+        showFullscreenControls();
       });
       if (stage) {
         var swipeStartX = null;
@@ -1363,6 +1401,8 @@ document.addEventListener("DOMContentLoaded", function () {
           swipeStartX = null;
           swipeStartY = null;
           if (Math.abs(deltaX) < 45 || Math.abs(deltaX) <= Math.abs(deltaY) * 1.2) return;
+          suppressFullscreenStageClick = true;
+          window.setTimeout(function () { suppressFullscreenStageClick = false; }, 450);
           var navigationButton = deltaX < 0 ? next : previous;
           if (!navigationButton.disabled) navigationButton.click();
         }, { passive: true });
@@ -1499,6 +1539,9 @@ document.addEventListener("DOMContentLoaded", function () {
   });
   function handlePresentationFullscreenChange() {
     var fullscreenElement = activePresentationFullscreenElement();
+    document.querySelectorAll(".inline-presentation-stage").forEach(function (stage) {
+      stage.dispatchEvent(new CustomEvent(fullscreenElement === stage ? "presentation-fullscreen-enter" : "presentation-fullscreen-exit"));
+    });
     document.querySelectorAll("[data-presentation-fullscreen]").forEach(function (button) {
       var presentation = button.closest(".folder-content-card--presentation");
       var stage = presentation ? presentation.querySelector(".inline-presentation-stage") : null;
