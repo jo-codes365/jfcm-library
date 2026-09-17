@@ -1509,6 +1509,14 @@ EVENT_TYPE_FILE_MAP = {key: filename for key, _label, filename in EVENT_TYPE_OPT
 
 def classify_file_type(file_or_mime, filename=None):
     if isinstance(file_or_mime, dict):
+        if (file_or_mime.get("kind") or "").strip().lower() == "event":
+            return {
+                "key": "event",
+                "label": "Event",
+                "icon": event_icon_file(file_or_mime.get("event_type")),
+                "mime_type": "event",
+                "extension": "",
+            }
         mime_type = (file_or_mime.get("mime_type") or "").lower().strip()
         filename = file_or_mime.get("original_filename") or file_or_mime.get("name") or filename or ""
     else:
@@ -2172,7 +2180,8 @@ def public_dashboard():
         files = cursor.fetchall()
         cursor.execute(
             "SELECT id, name, event_date, event_type, share_token, created_at FROM events "
-            "WHERE is_deleted = FALSE AND share_token IS NOT NULL ORDER BY event_date, name"
+            "WHERE is_deleted = FALSE AND share_token IS NOT NULL AND share_token <> '' "
+            "ORDER BY event_date DESC, name"
         )
         events = cursor.fetchall()
     except MySQLError:
@@ -3438,7 +3447,7 @@ def public_folder(share_token):
         is_global_search=False,
         is_shared_workspace=True,
         workspace_can_edit=share_context["can_edit"],
-        is_public_workspace="user_id" not in session,
+        is_public_workspace=not share_context["can_edit"],
         share_context=share_context,
         shared_root_folder_id=share_context["item_id"],
     )
@@ -3527,7 +3536,7 @@ def public_event(share_token):
         is_global_search=False,
         is_shared_workspace=True,
         workspace_can_edit=share_context["can_edit"],
-        is_public_workspace="user_id" not in session,
+        is_public_workspace=not share_context["can_edit"],
         share_context=share_context,
         month_name=calendar_module.month_name[date.today().month],
         year=date.today().year,

@@ -1500,7 +1500,7 @@ document.addEventListener("DOMContentLoaded", function () {
       ? (/^\d{4}-\d{2}-\d{2}$/.test(workspaceState.get("date") || "") ? workspaceState.get("date") : "all")
       : (["today", "7", "30", "365"].includes(workspaceState.get("date")) ? workspaceState.get("date") : "all")
   };
-  var typeMap = { folder: "Folder", image: "Image", pdf: "PDF", document: "Document", spreadsheet: "Spreadsheet", powerpoint: "PowerPoint", video: "Video", audio: "Audio", zip: "ZIP", other: "Other" };
+  var typeMap = { folder: "Folder", event: "Event", image: "Image", pdf: "PDF", document: "Document", spreadsheet: "Spreadsheet", powerpoint: "PowerPoint", video: "Video", audio: "Audio", zip: "ZIP", other: "Other" };
   var dateLabels = { today: "Today", "7": "Last 7 days", "30": "Last 30 days", "365": "Last year" };
   if (typeFilterMenu) {
     var savedTypeOption = typeFilterMenu.querySelector("input[value='" + filterState.type + "']");
