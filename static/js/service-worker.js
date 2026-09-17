@@ -2,7 +2,7 @@
 
 // Increment this version whenever the offline page, worker logic, or any
 // resource in CORE_URLS changes. Activation removes every older code cache.
-const OFFLINE_CACHE_VERSION = "v26";
+const OFFLINE_CACHE_VERSION = "v27";
 const CORE_CACHE_PREFIX = "jfcm-offline-core-";
 const CORE_CACHE = CORE_CACHE_PREFIX + OFFLINE_CACHE_VERSION;
 const SCOPE_CACHE_PREFIX = "jfcm-offline-scope-";

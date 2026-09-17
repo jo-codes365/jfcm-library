@@ -13,7 +13,20 @@
     {% if not session.get('user_id') %}
     <nav class="sidebar-nav">
       <a class="sidebar-link {% if public_workspace_kind|default('files') == 'files' %}active{% endif %}" href="{{ url_for('public_files') }}"><i class="bi bi-file-earmark-arrow-up"></i>Public Files</a>
-      <a class="sidebar-link {% if public_workspace_kind|default('files') == 'events' %}active{% endif %}" href="{{ url_for('public_events') }}"><i class="bi bi-calendar-date"></i>Events</a>
+      <hr style="width: 100%; margin: 3px 0; background-color: #cbd2dc; size: 0.5px;">
+      <div class="sidebar-events">
+        <div class="sidebar-link sidebar-event-parent {% if public_workspace_kind|default('files') == 'events' and not current_event %}active{% endif %}">
+          <a class="sidebar-event-link" href="{{ url_for('public_events') }}"><i class="bi bi-calendar-date"></i>Events</a>
+          <button id="events-toggle" class="sidebar-event-toggle" type="button" aria-label="Toggle Events submenu" aria-expanded="true" aria-controls="events-submenu"><i class="bi bi-caret-right-fill sidebar-event-caret" aria-hidden="true"></i></button>
+        </div>
+        <div id="events-submenu" class="events-submenu">
+          {% for event in sidebar_events %}
+          <a class="sidebar-link events-sublink {% if current_event and current_event.id == event.id %}active{% endif %}" href="{{ url_for('public_event', share_token=event.share_token) }}">{{ display_name(event.name) }}</a>
+          {% else %}
+          <span class="sidebar-link events-sublink muted">No events yet</span>
+          {% endfor %}
+        </div>
+      </div>
     </nav>
     {% endif %}
     <div class="sidebar-footer">

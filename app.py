@@ -2156,6 +2156,23 @@ def public_files():
     return public_dashboard()
 
 
+def public_sidebar_events():
+    """Return Events that have an active public-link token for public navigation."""
+    cursor = get_db().cursor(dictionary=True)
+    try:
+        cursor.execute(
+            "SELECT id, name, event_date, event_type, share_token FROM events "
+            "WHERE is_deleted = FALSE AND share_token IS NOT NULL AND share_token <> '' "
+            "ORDER BY event_date DESC, name"
+        )
+        return cursor.fetchall()
+    except MySQLError:
+        app.logger.exception("Public Events sidebar database error")
+        return []
+    finally:
+        cursor.close()
+
+
 @app.get("/public-events")
 def public_events():
     """Render public Events separately from the Public Files workspace."""
@@ -2193,7 +2210,7 @@ def public_events():
         "dashboard.html", page_title="Public Events", items=items, total_storage=0, total_files=len(items),
         section="events", current_folder=None, breadcrumbs=[], folder_id=None, event_id=None, current_event=None,
         selected_event_date=None, selected_event_date_iso="", is_event_date_workspace=False,
-        date_workspace_events=[], is_trash=False, move_folders=[], sidebar_events=[], search_query="",
+        date_workspace_events=[], is_trash=False, move_folders=[], sidebar_events=events, search_query="",
         calendar_auto_open=False, is_global_search=False, is_shared_workspace=False, is_public_workspace=True,
         workspace_can_edit=False, share_context=None, public_workspace_kind="events",
         month_name=calendar_module.month_name[date.today().month], year=date.today().year, month=date.today().month,
@@ -2234,7 +2251,7 @@ def public_dashboard():
         "dashboard.html", page_title="Public Files", items=items, total_storage=0, total_files=len(items),
         section="files", current_folder=None, breadcrumbs=[], folder_id=None, event_id=None, current_event=None,
         selected_event_date=None, selected_event_date_iso="", is_event_date_workspace=False,
-        date_workspace_events=[], is_trash=False, move_folders=[], sidebar_events=[], search_query="",
+        date_workspace_events=[], is_trash=False, move_folders=[], sidebar_events=public_sidebar_events(), search_query="",
         calendar_auto_open=False, is_global_search=False, is_shared_workspace=False, is_public_workspace=True,
         workspace_can_edit=False, share_context=None, public_workspace_kind="files",
         month_name=calendar_module.month_name[date.today().month], year=date.today().year, month=date.today().month,
@@ -3471,7 +3488,7 @@ def public_folder(share_token):
         current_event=None,
         is_trash=False,
         move_folders=[] if "user_id" not in session else move_folders,
-        sidebar_events=[],
+        sidebar_events=public_sidebar_events(),
         search_query="",
         is_global_search=False,
         is_shared_workspace=True,
@@ -3560,7 +3577,7 @@ def public_event(share_token):
         date_workspace_events=[],
         is_trash=False,
         move_folders=[] if "user_id" not in session else move_folders,
-        sidebar_events=[],
+        sidebar_events=public_sidebar_events(),
         search_query="",
         calendar_auto_open=False,
         is_global_search=False,
