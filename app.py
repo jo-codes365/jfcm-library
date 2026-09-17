@@ -797,26 +797,55 @@ class PresentationPreviewError(RuntimeError):
     pass
 
 
-def libreoffice_binary():
-    configured = os.getenv("LIBREOFFICE_BINARY", "").strip()
-    candidates = [configured] if configured else []
-    candidates.extend(["soffice", "libreoffice"])
-    if os.name == "nt":
-        candidates.extend([
-            r"C:\Program Files\LibreOffice\program\soffice.exe",
-            r"C:\Program Files (x86)\LibreOffice\program\soffice.exe",
-        ])
-    for candidate in candidates:
-        if not candidate:
-            continue
-        resolved = shutil.which(candidate)
+def detect_libreoffice_binary():
+    configured = os.getenv("LIBREOFFICE_BINARY", "").strip().strip('"')
+    if configured:
+        resolved = shutil.which(configured)
         if resolved:
-            return resolved
-        if Path(candidate).is_file():
-            return candidate
+            return str(Path(resolved).resolve())
+        if os.name == "nt" and Path(configured).is_file():
+            return str(Path(configured).resolve())
+        raise PresentationPreviewError(
+            f"LIBREOFFICE_BINARY is set to '{configured}', but that executable could not be found or run."
+        )
+
+    for command in ("libreoffice", "soffice"):
+        resolved = shutil.which(command)
+        if resolved:
+            return str(Path(resolved).resolve())
+
+    if os.name == "nt":
+        windows_binary = Path(r"C:\Program Files\LibreOffice\program\soffice.exe")
+        if windows_binary.is_file():
+            return str(windows_binary.resolve())
+
     raise PresentationPreviewError(
-        "The presentation renderer is not installed. Install LibreOffice or set LIBREOFFICE_BINARY."
+        "LibreOffice was not found. Set LIBREOFFICE_BINARY or install 'libreoffice'/'soffice' on PATH."
     )
+
+
+_LIBREOFFICE_BINARY_PATH = None
+
+
+def libreoffice_binary():
+    global _LIBREOFFICE_BINARY_PATH
+    if _LIBREOFFICE_BINARY_PATH:
+        return _LIBREOFFICE_BINARY_PATH
+    try:
+        _LIBREOFFICE_BINARY_PATH = detect_libreoffice_binary()
+    except PresentationPreviewError as error:
+        app.logger.error("LibreOffice detection failed: %s", error)
+        raise
+    app.logger.info("LibreOffice detected at startup: %s", _LIBREOFFICE_BINARY_PATH)
+    return _LIBREOFFICE_BINARY_PATH
+
+
+try:
+    libreoffice_binary()
+except PresentationPreviewError:
+    # Presentation requests will return a clear 503 while the rest of the
+    # file service remains available.
+    pass
 
 
 def presentation_preview_cache(record):

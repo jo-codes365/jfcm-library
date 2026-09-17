@@ -118,13 +118,15 @@ The preview page supports JPEG, PNG, GIF, WEBP, PDF, TXT, MP4, WEBM, MP3, WAV, a
 
 PowerPoint previews are rendered server-side through LibreOffice and PDF into high-resolution slide images. The dashboard displays those finished slide pixels instead of rebuilding the deck in HTML or JavaScript, preserving PowerPoint layout, layering, gradients, transparency, cropping, and slide dimensions as closely as the server's installed fonts allow. The original `.ppt`, `.pptx`, `.pps`, `.ppsx`, or `.odp` upload is never modified and remains the download source.
 
-Install LibreOffice on the application host and make `soffice` available on `PATH`, or set `LIBREOFFICE_BINARY` to its executable. `PRESENTATION_PREVIEW_DPI` controls the cached PNG quality (default `192`, clamped to `144`–`300`). Install on Linux, for example, with:
+Install LibreOffice on the application host and make `libreoffice` or `soffice` available on `PATH`, or set `LIBREOFFICE_BINARY` to its executable. At startup the service logs the resolved executable path, or a clear error if no executable is available. `PRESENTATION_PREVIEW_DPI` controls the cached PNG quality (default `192`, clamped to `144`–`300`). Install on Linux, for example, with:
 
 ```sh
 apt-get install libreoffice
 ```
 
 For the closest font match, install the fonts used by uploaded presentations on the server. Rendered previews are cached under `uploads/.presentation-previews`; these derivative files do not replace or alter uploads.
+
+The included `nixpacks.toml` installs the LibreOffice Nix package into the runtime image and sets `LIBREOFFICE_BINARY=libreoffice`. Railway environment variables have higher priority, so the executable can still be overridden in the service settings.
 
 ## Event sharing migration for an existing database
 

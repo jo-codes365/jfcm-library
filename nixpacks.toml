@@ -1,2 +1,5 @@
 [phases.setup]
 nixPkgs = ["...", "libreoffice"]
+
+[variables]
+LIBREOFFICE_BINARY = "libreoffice"
