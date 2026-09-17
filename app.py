@@ -526,7 +526,7 @@ def share_context_from_token(kind, share_token):
 def request_share_context():
     share_kind = request.values.get("share_context_kind", "").strip().lower()
     share_token = request.values.get("share_context_token", "").strip()
-    if share_kind in {"file", "folder", "event"} and re.fullmatch(r"[A-Za-z0-9_-]{32,64}", share_token):
+    if share_kind in {"file", "folder", "event"} and re.fullmatch(r"[A-Za-z0-9_-]{1,64}", share_token):
         return share_context_from_token(share_kind, share_token)
     return None
 
@@ -3500,17 +3500,50 @@ def public_folder(share_token):
     )
 
 
+def public_event_context(event_id, share_token):
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", share_token or ""):
+        return None
+    record = query_one(
+        "SELECT id, user_id, share_token FROM events "
+        "WHERE id = %s AND share_token = %s AND is_deleted = FALSE",
+        (event_id, share_token),
+    )
+    if not record:
+        return None
+    return {
+        "kind": "event",
+        "token": record["share_token"],
+        "item_id": record["id"],
+        "owner_id": record["user_id"],
+        "can_edit": False,
+    }
+
+
+@app.get("/public-events/<int:event_id>/<share_token>")
+def public_event_workspace(event_id, share_token):
+    share_context = public_event_context(event_id, share_token)
+    if not share_context:
+        abort(404)
+    return render_public_event_workspace(event_id, share_context)
+
+
 @app.get("/event/<share_token>")
 def public_event(share_token):
-    if not re.fullmatch(r"[A-Za-z0-9_-]{32,64}", share_token):
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", share_token):
         abort(404)
     share_context = share_context_from_token("event", share_token)
     if not share_context:
         abort(404)
+    share_context = {**share_context, "can_edit": False}
     event_id = share_context["item_id"]
-    current_event = accessible_event(event_id, share_context=share_context)
-    if not current_event:
+    return render_public_event_workspace(event_id, share_context)
+
+
+def render_public_event_workspace(event_id, share_context):
+    current_event = event_record(event_id)
+    if not current_event or current_event["user_id"] != share_context["owner_id"] or current_event["id"] != share_context["item_id"]:
         abort(404)
+    current_event = {**current_event, "can_edit": False, "access_via": "event_link"}
     current_folder_id = request.args.get("folder", type=int)
     current_folder = None
     breadcrumbs = []

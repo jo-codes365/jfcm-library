@@ -21,7 +21,7 @@
         </div>
         <div id="events-submenu" class="events-submenu">
           {% for event in sidebar_events %}
-          <a class="sidebar-link events-sublink {% if current_event and current_event.id == event.id %}active{% endif %}" href="{{ url_for('public_event', share_token=event.share_token) }}">{{ display_name(event.name) }}</a>
+          <a class="sidebar-link events-sublink {% if current_event and current_event.id == event.id %}active{% endif %}" href="{{ url_for('public_event_workspace', event_id=event.id, share_token=event.share_token) }}">{{ display_name(event.name) }}</a>
           {% else %}
           <span class="sidebar-link events-sublink muted">No events yet</span>
           {% endfor %}
@@ -486,7 +486,7 @@
                 <tbody>
                   {% for item in items %}
                   {% if is_public_workspace %}
-                    {% set item_open_url = url_for('public_event', share_token=item.share_token) if item.kind == 'event' else url_for('public_folder', share_token=item.share_token) if item.kind == 'folder' else url_for('token_preview', share_token=item.share_token) %}
+                    {% set item_open_url = url_for('public_event_workspace', event_id=item.id, share_token=item.share_token) if item.kind == 'event' else url_for('public_folder', share_token=item.share_token) if item.kind == 'folder' else url_for('token_preview', share_token=item.share_token) %}
                   {% elif is_global_search %}
                     {% set item_open_url = url_for('dashboard', section='trash') if is_trash else url_for('public_event', share_token=share_context.token) if is_shared_workspace and item.kind == 'event' else url_for('dashboard', section='events', event=item.id) if item.kind == 'event' else url_for('public_event', share_token=share_context.token, folder=item.id) if is_shared_workspace and share_context.kind == 'event' and item.kind == 'folder' else url_for('public_folder', share_token=share_context.token, folder=item.id) if is_shared_workspace and share_context.kind == 'folder' and item.kind == 'folder' else url_for('preview', file_id=item.id, share_context_kind=share_context.kind, share_context_token=share_context.token) if is_shared_workspace and item.kind == 'file' else url_for('dashboard', section='events', event=event_id, folder=item.id) if section == 'events' and event_id and item.kind == 'folder' else url_for('dashboard', folder=item.id) if item.kind == 'folder' else url_for('preview', file_id=item.id) %}
                   {% else %}
@@ -509,7 +509,7 @@
                     {% if not is_public_workspace %}<td class="selection-cell"><input class="item-select" type="checkbox" name="items" value="{{ item.kind }}:{{ item.id }}" aria-label="Select {{ display_name(item.name) }}"></td>{% endif %}
                     <td class="file-name">
                       {% if section == 'events' and not current_event and not is_event_date_workspace and item.kind == 'event' %}
-                      {% if not is_trash %}<a href="{{ item_open_url }}">{% else %}<span>{% endif %}<img class="event-icon-inline" src="{{ url_for('static', filename='images/' ~ event_icon_file(item.event_type)) }}" alt=""> {{ display_name(item.name) }}{% if not is_trash %}</a>{% else %}</span>{% endif %}
+                      {% if not is_trash %}<a href="{{ item_open_url }}">{% else %}<span>{% endif %}<img class="event-icon-inline sml" src="{{ url_for('static', filename='images/' ~ event_icon_file(item.event_type)) }}" alt=""> {{ display_name(item.name) }}{% if not is_trash %}</a>{% else %}</span>{% endif %}
                       {% elif item.kind == 'folder' %}
                       {% if not is_trash or is_global_search %}
                       <a href="{{ item_open_url }}">
