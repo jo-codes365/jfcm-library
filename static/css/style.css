@@ -1528,7 +1528,7 @@ table tbody tr:nth-child(even) {
   max-height: calc(100% - 64px);
   height: auto;
   object-fit: contain;
-  border: 1px solid #ccc;
+  border: 1px solid #ddd;
   background: #fff;
 }
 
@@ -3774,7 +3774,7 @@ button {
   padding: 0;
   place-items: center;
   overflow: hidden;
-  border: 1px solid #ccc;
+  border: 1px solid #ddd;
   border-radius: 8px;
   background: #f2f4f2;
 }
@@ -3862,7 +3862,7 @@ button {
   max-width: none;
   max-height: none;
   object-fit: contain;
-  border: 1px solid #ccc;
+  border: 1px solid #ddd;
   background: #000;
   visibility: visible;
 }
