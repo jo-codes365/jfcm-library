@@ -1251,6 +1251,58 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
   initializeFolderCarousels(document);
+  function activePresentationFullscreenElement() {
+    return document.fullscreenElement
+      || document.webkitFullscreenElement
+      || document.webkitCurrentFullScreenElement
+      || document.querySelector(".inline-presentation-stage.is-presentation-fullscreen-fallback")
+      || null;
+  }
+  function enterPresentationFullscreenFallback(element) {
+    element.classList.add("is-presentation-fullscreen-fallback");
+    document.documentElement.classList.add("presentation-fullscreen-fallback-active");
+    document.body.classList.add("presentation-fullscreen-fallback-active");
+  }
+  function requestPresentationFullscreen(element) {
+    try {
+      if (element.requestFullscreen) return Promise.resolve(element.requestFullscreen());
+      if (element.webkitRequestFullscreen) return Promise.resolve(element.webkitRequestFullscreen());
+      return Promise.reject(new Error("Fullscreen is unavailable in this browser."));
+    } catch (error) {
+      return Promise.reject(error);
+    }
+  }
+  function exitPresentationFullscreen() {
+    try {
+      var fallbackElement = document.querySelector(".inline-presentation-stage.is-presentation-fullscreen-fallback");
+      if (fallbackElement) {
+        fallbackElement.classList.remove("is-presentation-fullscreen-fallback");
+        document.documentElement.classList.remove("presentation-fullscreen-fallback-active");
+        document.body.classList.remove("presentation-fullscreen-fallback-active");
+        handlePresentationFullscreenChange();
+        return Promise.resolve();
+      }
+      if (document.exitFullscreen) return Promise.resolve(document.exitFullscreen());
+      if (document.webkitExitFullscreen) return Promise.resolve(document.webkitExitFullscreen());
+      if (document.webkitCancelFullScreen) return Promise.resolve(document.webkitCancelFullScreen());
+      return Promise.resolve();
+    } catch (error) {
+      return Promise.reject(error);
+    }
+  }
+  function isMobilePresentationViewport() {
+    return window.matchMedia("(max-width: 480px), (max-height: 480px) and (orientation: landscape)").matches;
+  }
+  function lockPresentationLandscape() {
+    if (!isMobilePresentationViewport() || !screen.orientation || typeof screen.orientation.lock !== "function") return;
+    try {
+      Promise.resolve(screen.orientation.lock("landscape")).catch(function () {});
+    } catch (_error) {}
+  }
+  function unlockPresentationOrientation() {
+    if (!screen.orientation || typeof screen.orientation.unlock !== "function") return;
+    try { screen.orientation.unlock(); } catch (_error) {}
+  }
   function initializeInlinePowerpointPreviews(root) {
     (root || document).querySelectorAll("[data-inline-powerpoint-preview]").forEach(function (preview) {
       if (preview.dataset.powerpointInitialized === "true") return;
@@ -1261,21 +1313,64 @@ document.addEventListener("DOMContentLoaded", function () {
       var previous = preview.querySelector("[data-powerpoint-previous]");
       var next = preview.querySelector("[data-powerpoint-next]");
       var stage = preview.querySelector(".inline-presentation-stage");
+      var fullscreenPrevious = preview.querySelector("[data-powerpoint-fullscreen-previous]");
+      var fullscreenNext = preview.querySelector("[data-powerpoint-fullscreen-next]");
+      var fullscreenExit = preview.querySelector("[data-powerpoint-fullscreen-exit]");
       if (!canvas || !message || !status || !previous || !next) return;
       preview.classList.add("is-powerpoint-loading");
       preview.setAttribute("aria-busy", "true");
       if (!preview.hasAttribute("tabindex")) preview.tabIndex = 0;
+      if (stage && !stage.hasAttribute("tabindex")) stage.tabIndex = -1;
       if (stage) stage.addEventListener("click", function (event) {
         event.stopPropagation();
         preview.focus({ preventScroll: true });
       });
       preview.addEventListener("keydown", function (event) {
-        var navigationButton = event.key === "ArrowLeft" ? previous : event.key === "ArrowRight" ? next : null;
+        var navigationButton = event.key === "ArrowLeft" || event.key === "ArrowUp"
+          ? previous
+          : event.key === "ArrowRight" || event.key === "ArrowDown"
+            ? next
+            : null;
         if (!navigationButton) return;
         event.preventDefault();
         event.stopPropagation();
         if (!navigationButton.disabled) navigationButton.click();
       });
+      if (fullscreenPrevious) fullscreenPrevious.addEventListener("click", function (event) {
+        event.stopPropagation();
+        if (!previous.disabled) previous.click();
+      });
+      if (fullscreenNext) fullscreenNext.addEventListener("click", function (event) {
+        event.stopPropagation();
+        if (!next.disabled) next.click();
+      });
+      if (fullscreenExit) fullscreenExit.addEventListener("click", function (event) {
+        event.stopPropagation();
+        exitPresentationFullscreen().catch(function () {});
+      });
+      if (stage) {
+        var swipeStartX = null;
+        var swipeStartY = null;
+        stage.addEventListener("touchstart", function (event) {
+          if (activePresentationFullscreenElement() !== stage || !isMobilePresentationViewport() || event.touches.length !== 1) return;
+          swipeStartX = event.touches[0].clientX;
+          swipeStartY = event.touches[0].clientY;
+        }, { passive: true });
+        stage.addEventListener("touchend", function (event) {
+          if (swipeStartX === null || swipeStartY === null || !event.changedTouches.length) return;
+          var deltaX = event.changedTouches[0].clientX - swipeStartX;
+          var deltaY = event.changedTouches[0].clientY - swipeStartY;
+          swipeStartX = null;
+          swipeStartY = null;
+          if (Math.abs(deltaX) < 45 || Math.abs(deltaX) <= Math.abs(deltaY) * 1.2) return;
+          var navigationButton = deltaX < 0 ? next : previous;
+          if (!navigationButton.disabled) navigationButton.click();
+        }, { passive: true });
+        stage.addEventListener("touchcancel", function () {
+          swipeStartX = null;
+          swipeStartY = null;
+        }, { passive: true });
+      }
       function unavailable(text) {
         preview.classList.remove("is-powerpoint-loading");
         preview.classList.add("is-powerpoint-unavailable");
@@ -1286,6 +1381,8 @@ document.addEventListener("DOMContentLoaded", function () {
         status.textContent = "Preview unavailable";
         previous.disabled = true;
         next.disabled = true;
+        if (fullscreenPrevious) fullscreenPrevious.disabled = true;
+        if (fullscreenNext) fullscreenNext.disabled = true;
       }
       fetch(preview.dataset.manifestUrl, { credentials: "same-origin" }).then(async function (response) {
         var result = await response.json().catch(function () { return {}; });
@@ -1340,6 +1437,8 @@ document.addEventListener("DOMContentLoaded", function () {
             + (frames[currentIndex].length > 1 ? " · Step " + (currentStep + 1) + " of " + frames[currentIndex].length : "");
           previous.disabled = currentIndex <= 0 && currentStep <= 0;
           next.disabled = currentIndex >= frames.length - 1 && currentStep >= frames[currentIndex].length - 1;
+          if (fullscreenPrevious) fullscreenPrevious.disabled = previous.disabled;
+          if (fullscreenNext) fullscreenNext.disabled = next.disabled;
         }
         previous.addEventListener("click", async function () {
           previous.disabled = true;
@@ -1378,38 +1477,52 @@ document.addEventListener("DOMContentLoaded", function () {
     event.preventDefault();
     event.stopPropagation();
     var presentation = fullscreenButton.closest(".folder-content-card--presentation");
-    var canvas = presentation ? presentation.querySelector("[data-powerpoint-canvas]") : null;
-    if (!canvas) return;
-    if (document.fullscreenElement === canvas) {
-      document.exitFullscreen();
+    var stage = presentation ? presentation.querySelector(".inline-presentation-stage") : null;
+    if (!stage) return;
+    if (activePresentationFullscreenElement() === stage) {
+      exitPresentationFullscreen().catch(function () {});
       return;
     }
-    canvas.requestFullscreen().catch(function () {
+    requestPresentationFullscreen(stage).then(function () {
+      stage.focus({ preventScroll: true });
+      lockPresentationLandscape();
+    }).catch(function () {
+      if (isMobilePresentationViewport()) {
+        enterPresentationFullscreenFallback(stage);
+        stage.focus({ preventScroll: true });
+        handlePresentationFullscreenChange();
+        lockPresentationLandscape();
+        return;
+      }
       showToast("Fullscreen is unavailable in this browser.", "error");
     });
   });
-  document.addEventListener("fullscreenchange", function () {
+  function handlePresentationFullscreenChange() {
+    var fullscreenElement = activePresentationFullscreenElement();
     document.querySelectorAll("[data-presentation-fullscreen]").forEach(function (button) {
       var presentation = button.closest(".folder-content-card--presentation");
-      var canvas = presentation ? presentation.querySelector("[data-powerpoint-canvas]") : null;
-      var isFullscreen = document.fullscreenElement === canvas;
+      var stage = presentation ? presentation.querySelector(".inline-presentation-stage") : null;
+      var isFullscreen = fullscreenElement === stage;
       button.setAttribute("aria-label", isFullscreen ? "Exit presentation fullscreen" : "View presentation in fullscreen");
       button.setAttribute("title", isFullscreen ? "Exit fullscreen" : "Fullscreen");
     });
-  });
+    if (!fullscreenElement) unlockPresentationOrientation();
+  }
+  document.addEventListener("fullscreenchange", handlePresentationFullscreenChange);
+  document.addEventListener("webkitfullscreenchange", handlePresentationFullscreenChange);
   document.addEventListener("keydown", function (event) {
-    var fullscreenCanvas = document.fullscreenElement;
-    if (!fullscreenCanvas || !fullscreenCanvas.matches("[data-powerpoint-canvas]")) return;
+    var fullscreenStage = activePresentationFullscreenElement();
+    if (!fullscreenStage || !fullscreenStage.matches(".inline-presentation-stage")) return;
     if (event.key === "Escape") {
       event.preventDefault();
-      document.exitFullscreen();
+      exitPresentationFullscreen().catch(function () {});
       return;
     }
-    var preview = fullscreenCanvas.closest("[data-inline-powerpoint-preview]");
+    var preview = fullscreenStage.closest("[data-inline-powerpoint-preview]");
     if (!preview) return;
-    var navigationButton = event.key === "ArrowLeft"
+    var navigationButton = event.key === "ArrowLeft" || event.key === "ArrowUp"
       ? preview.querySelector("[data-powerpoint-previous]")
-      : event.key === "ArrowRight"
+      : event.key === "ArrowRight" || event.key === "ArrowDown"
         ? preview.querySelector("[data-powerpoint-next]")
         : null;
     if (!navigationButton) return;

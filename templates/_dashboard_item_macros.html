@@ -100,6 +100,11 @@ data-kind="{{ item.kind }}" data-item-id="{{ item.id }}" data-parent-id="{{ item
     <div class="inline-presentation-stage">
       <canvas data-powerpoint-canvas aria-label="Slide preview for {{ display_name(item.name) }}"></canvas>
       <p data-powerpoint-message>Loading presentation preview...</p>
+      <div class="presentation-fullscreen-controls" aria-label="Fullscreen presentation controls">
+        <button class="presentation-fullscreen-previous" type="button" data-powerpoint-fullscreen-previous aria-label="Previous slide"><i class="bi bi-chevron-left" aria-hidden="true"></i></button>
+        <button class="presentation-fullscreen-exit" type="button" data-powerpoint-fullscreen-exit><i class="bi bi-fullscreen-exit" aria-hidden="true"></i><span>Exit Fullscreen</span></button>
+        <button class="presentation-fullscreen-next" type="button" data-powerpoint-fullscreen-next aria-label="Next slide"><i class="bi bi-chevron-right" aria-hidden="true"></i></button>
+      </div>
     </div>
     <nav class="inline-presentation-navigation" aria-label="Presentation pages">
       <button type="button" data-powerpoint-previous aria-label="Previous slide" disabled><i class="bi bi-chevron-left" aria-hidden="true"></i></button>

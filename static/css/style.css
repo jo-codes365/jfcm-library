@@ -1528,7 +1528,6 @@ table tbody tr:nth-child(even) {
   max-height: calc(100% - 64px);
   height: auto;
   object-fit: contain;
-  border: 1px solid #ddd;
   background: #fff;
 }
 
@@ -3774,7 +3773,6 @@ button {
   padding: 0;
   place-items: center;
   overflow: hidden;
-  border: 1px solid #ddd;
   border-radius: 8px;
   background: #f2f4f2;
 }
@@ -3800,6 +3798,9 @@ button {
   font-size: .82rem;
   line-height: 1.45;
   text-align: center;
+}
+.presentation-fullscreen-controls {
+  display: none;
 }
 .inline-presentation-navigation {
   display: flex;
@@ -3856,18 +3857,40 @@ button {
 .folder-table-section .file-table tbody td {
   border-bottom: 0;
 }
-.inline-presentation-stage canvas:fullscreen {
+.inline-presentation-stage:fullscreen,
+.inline-presentation-stage:-webkit-full-screen,
+.inline-presentation-stage.is-presentation-fullscreen-fallback {
+  position: fixed;
+  z-index: 2147483646;
+  inset: 0;
   width: 100vw !important;
   height: 100vh !important;
+  width: 100dvw !important;
+  height: 100dvh !important;
+  aspect-ratio: auto !important;
+  margin: 0;
+  padding: 0;
+  place-items: center;
+  overflow: hidden;
+  background: #000;
+}
+.inline-presentation-stage:fullscreen canvas,
+.inline-presentation-stage:-webkit-full-screen canvas,
+.inline-presentation-stage.is-presentation-fullscreen-fallback canvas {
+  width: 100% !important;
+  height: 100% !important;
   max-width: none;
   max-height: none;
   object-fit: contain;
-  border: 1px solid #ddd;
   background: #000;
   visibility: visible;
 }
-.inline-presentation-stage canvas:fullscreen::backdrop {
+.inline-presentation-stage:fullscreen::backdrop {
   background: #000;
+}
+html.presentation-fullscreen-fallback-active,
+body.presentation-fullscreen-fallback-active {
+  overflow: hidden;
 }
 @media (prefers-reduced-motion: reduce) {
   .folder-carousel-track { transition: none; }
@@ -3918,6 +3941,12 @@ button {
     min-height: 18px;
     transform: none;
   }
+  .folder-content-card--image .card-item-select + .image-card-header {
+    padding-left: 12px;
+  }
+  .file-workspace.mobile-select-mode .folder-content-card--image .card-item-select + .image-card-header {
+    padding-left: 38px;
+  }
   .file-workspace.mobile-select-mode .folder-content-card--video {
     padding-top: 44px;
   }
@@ -3939,6 +3968,60 @@ button {
     height: clamp(110px, 36vw, 160px);
   }
   .inline-presentation-header { gap: 8px; }
+}
+@media (max-width: 480px), (max-height: 480px) and (orientation: landscape) {
+  .inline-presentation-stage:fullscreen .presentation-fullscreen-controls,
+  .inline-presentation-stage:-webkit-full-screen .presentation-fullscreen-controls,
+  .inline-presentation-stage.is-presentation-fullscreen-fallback .presentation-fullscreen-controls {
+    position: absolute;
+    z-index: 4;
+    inset: 0;
+    display: block;
+    pointer-events: none;
+  }
+  .inline-presentation-stage:fullscreen,
+  .inline-presentation-stage:-webkit-full-screen,
+  .inline-presentation-stage.is-presentation-fullscreen-fallback {
+    overscroll-behavior: none;
+    touch-action: none;
+  }
+  .presentation-fullscreen-controls button {
+    position: absolute;
+    display: inline-flex;
+    min-width: 42px;
+    min-height: 42px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255, 255, 255, .55);
+    border-radius: 6px;
+    color: #fff;
+    background: rgba(0, 0, 0, .58);
+    font: inherit;
+    pointer-events: auto;
+    touch-action: manipulation;
+  }
+  .presentation-fullscreen-controls button:disabled {
+    opacity: .38;
+  }
+  .presentation-fullscreen-exit {
+    top: max(12px, env(safe-area-inset-top));
+    right: max(12px, env(safe-area-inset-right));
+    gap: 7px;
+    padding: 8px 12px;
+  }
+  .presentation-fullscreen-previous,
+  .presentation-fullscreen-next {
+    top: 50%;
+    width: 42px;
+    padding: 0;
+    transform: translateY(-50%);
+  }
+  .presentation-fullscreen-previous {
+    left: max(10px, env(safe-area-inset-left));
+  }
+  .presentation-fullscreen-next {
+    right: max(10px, env(safe-area-inset-right));
+  }
 }
 .download-action:hover {
   color: #6FABFF;
@@ -4289,6 +4372,7 @@ hr {
     .mobile-select-button {
         min-height: 34px;
         padding: 6px 14px;
+        background: #eaf7ee;
     }
 
     .mobile-select-button[aria-pressed="true"] {
