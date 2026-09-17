@@ -194,7 +194,7 @@
                 My Files
                 {% endif %}
               </h1>
-              {% if not current_folder %}
+              {% if not current_folder and section != 'events' %}
               <div class="vr"> </div>
               <div class="filter-controls">
                 {% if not (is_public_workspace and public_workspace_kind|default('files') == 'events' and not current_event) %}
@@ -412,7 +412,9 @@
             <div class="folder-section-view" data-sectioned-folder-view="true" data-public-workspace="{{ 'true' if is_public_workspace else 'false' }}">
               {% if folder_groups.presentations %}
               <section class="folder-content-section" data-folder-section>
-                <div class="folder-section-heading"><div><h2>Presentations</h2></div></div>
+                <div class="folder-section-heading"><div>
+                  <!-- <h2>Presentations</h2> -->
+                </div></div>
                 <div class="presentation-grid">
                   {% for item in items if item.kind == 'file' and file_type_key(item) == 'powerpoint' %}{{ dashboard_items.item_card(item, 'presentation') }}{% endfor %}
                 </div>
