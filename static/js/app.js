@@ -1264,7 +1264,18 @@ document.addEventListener("DOMContentLoaded", function () {
       if (!canvas || !message || !status || !previous || !next) return;
       preview.classList.add("is-powerpoint-loading");
       preview.setAttribute("aria-busy", "true");
-      if (stage) stage.addEventListener("click", function (event) { event.stopPropagation(); });
+      if (!preview.hasAttribute("tabindex")) preview.tabIndex = 0;
+      if (stage) stage.addEventListener("click", function (event) {
+        event.stopPropagation();
+        preview.focus({ preventScroll: true });
+      });
+      preview.addEventListener("keydown", function (event) {
+        var navigationButton = event.key === "ArrowLeft" ? previous : event.key === "ArrowRight" ? next : null;
+        if (!navigationButton) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (!navigationButton.disabled) navigationButton.click();
+      });
       function unavailable(text) {
         preview.classList.remove("is-powerpoint-loading");
         preview.classList.add("is-powerpoint-unavailable");
@@ -1285,22 +1296,26 @@ document.addEventListener("DOMContentLoaded", function () {
           stage.style.aspectRatio = result.width + " / " + result.height;
         }
         var context = canvas.getContext("2d", { alpha: true });
-        var images = new Array(result.slides.length);
+        var frames = Array.isArray(result.steps) && result.steps.length === result.slides.length
+          ? result.steps.map(function (steps, index) { return Array.isArray(steps) && steps.length ? steps : [result.slides[index]]; })
+          : result.slides.map(function (slide) { return [slide]; });
+        var images = frames.map(function (steps) { return new Array(steps.length); });
         var currentIndex = 0;
+        var currentStep = 0;
         var renderSequence = 0;
-        function loadSlide(index) {
-          if (images[index]) return Promise.resolve(images[index]);
+        function loadFrame(index, stepIndex) {
+          if (images[index][stepIndex]) return Promise.resolve(images[index][stepIndex]);
           return new Promise(function (resolve, reject) {
             var slide = new Image();
             slide.decoding = "async";
-            slide.onload = function () { images[index] = slide; resolve(slide); };
-            slide.onerror = function () { reject(new Error("A rendered slide could not be loaded.")); };
-            slide.src = result.slides[index];
+            slide.onload = function () { images[index][stepIndex] = slide; resolve(slide); };
+            slide.onerror = function () { reject(new Error("A rendered presentation frame could not be loaded.")); };
+            slide.src = frames[index][stepIndex];
           });
         }
-        async function showSlide(index) {
+        async function showFrame(index, stepIndex) {
           var sequence = ++renderSequence;
-          var slide = await loadSlide(index);
+          var slide = await loadFrame(index, stepIndex);
           if (sequence !== renderSequence) return;
           var page = Array.isArray(result.pages) ? result.pages[index] : null;
           var pageWidth = page && (page.page_width_points || page.width) || slide.naturalWidth;
@@ -1311,31 +1326,46 @@ document.addEventListener("DOMContentLoaded", function () {
           context.clearRect(0, 0, canvas.width, canvas.height);
           context.drawImage(slide, 0, 0);
           currentIndex = index;
+          currentStep = stepIndex;
           canvas.classList.add("is-ready");
           preview.classList.remove("is-powerpoint-loading", "is-powerpoint-unavailable");
           preview.removeAttribute("aria-busy");
           message.hidden = true;
           updateControls();
-          if (index + 1 < result.slides.length) loadSlide(index + 1).catch(function () {});
+          if (stepIndex + 1 < frames[index].length) loadFrame(index, stepIndex + 1).catch(function () {});
+          else if (index + 1 < frames.length) loadFrame(index + 1, 0).catch(function () {});
         }
         function updateControls() {
-          status.textContent = "Page " + (currentIndex + 1) + " of " + result.slides.length;
-          previous.disabled = currentIndex <= 0;
-          next.disabled = currentIndex >= result.slides.length - 1;
+          status.textContent = "Page " + (currentIndex + 1) + " of " + frames.length
+            + (frames[currentIndex].length > 1 ? " · Step " + (currentStep + 1) + " of " + frames[currentIndex].length : "");
+          previous.disabled = currentIndex <= 0 && currentStep <= 0;
+          next.disabled = currentIndex >= frames.length - 1 && currentStep >= frames[currentIndex].length - 1;
         }
         previous.addEventListener("click", async function () {
           previous.disabled = true;
           next.disabled = true;
-          try { await showSlide(Math.max(0, currentIndex - 1)); }
+          var targetIndex = currentIndex;
+          var targetStep = currentStep - 1;
+          if (targetStep < 0 && targetIndex > 0) {
+            targetIndex -= 1;
+            targetStep = frames[targetIndex].length - 1;
+          }
+          try { await showFrame(targetIndex, Math.max(0, targetStep)); }
           catch (error) { unavailable(error.message); }
         });
         next.addEventListener("click", async function () {
           previous.disabled = true;
           next.disabled = true;
-          try { await showSlide(Math.min(result.slides.length - 1, currentIndex + 1)); }
+          var targetIndex = currentIndex;
+          var targetStep = currentStep + 1;
+          if (targetStep >= frames[targetIndex].length && targetIndex < frames.length - 1) {
+            targetIndex += 1;
+            targetStep = 0;
+          }
+          try { await showFrame(targetIndex, Math.min(frames[targetIndex].length - 1, targetStep)); }
           catch (error) { unavailable(error.message); }
         });
-        await showSlide(0);
+        await showFrame(0, 0);
       }).catch(function (error) {
         unavailable((error && error.message ? error.message : "This presentation could not be rendered.") + " Download the original file to view it.");
       });
@@ -2646,6 +2676,13 @@ document.addEventListener("DOMContentLoaded", function () {
     var previousSlide = document.getElementById("powerpoint-previous");
     var nextSlide = document.getElementById("powerpoint-next");
     var powerpointCanvas = document.getElementById("powerpoint-canvas");
+    if (!powerpointPreview.hasAttribute("tabindex")) powerpointPreview.tabIndex = 0;
+    powerpointPreview.addEventListener("keydown", function (event) {
+      var navigationButton = event.key === "ArrowLeft" ? previousSlide : event.key === "ArrowRight" ? nextSlide : null;
+      if (!navigationButton) return;
+      event.preventDefault();
+      if (!navigationButton.disabled) navigationButton.click();
+    });
     function powerpointUnavailable(message) {
       powerpointPreview.classList.add("powerpoint-unavailable");
       powerpointCanvas.hidden = true;
@@ -2659,20 +2696,27 @@ document.addEventListener("DOMContentLoaded", function () {
         throw new Error(result.error || "PowerPoint preview could not be rendered.");
       }
       var context = powerpointCanvas.getContext("2d", { alpha: true });
-      var images = new Array(result.slides.length);
+      var frames = Array.isArray(result.steps) && result.steps.length === result.slides.length
+        ? result.steps.map(function (steps, index) { return Array.isArray(steps) && steps.length ? steps : [result.slides[index]]; })
+        : result.slides.map(function (slide) { return [slide]; });
+      var images = frames.map(function (steps) { return new Array(steps.length); });
       var currentIndex = 0;
-      function loadSlide(index) {
-        if (images[index]) return Promise.resolve(images[index]);
+      var currentStep = 0;
+      var renderSequence = 0;
+      function loadFrame(index, stepIndex) {
+        if (images[index][stepIndex]) return Promise.resolve(images[index][stepIndex]);
         return new Promise(function (resolve, reject) {
           var slide = new Image();
           slide.decoding = "async";
-          slide.onload = function () { images[index] = slide; resolve(slide); };
-          slide.onerror = function () { reject(new Error("A rendered slide could not be loaded.")); };
-          slide.src = result.slides[index];
+          slide.onload = function () { images[index][stepIndex] = slide; resolve(slide); };
+          slide.onerror = function () { reject(new Error("A rendered presentation frame could not be loaded.")); };
+          slide.src = frames[index][stepIndex];
         });
       }
-      async function showSlide(index) {
-        var slide = await loadSlide(index);
+      async function showFrame(index, stepIndex) {
+        var sequence = ++renderSequence;
+        var slide = await loadFrame(index, stepIndex);
+        if (sequence !== renderSequence) return;
         var page = Array.isArray(result.pages) ? result.pages[index] : null;
         var pageWidth = page && (page.page_width_points || page.width) || slide.naturalWidth;
         var pageHeight = page && (page.page_height_points || page.height) || slide.naturalHeight;
@@ -2682,16 +2726,33 @@ document.addEventListener("DOMContentLoaded", function () {
         context.clearRect(0, 0, powerpointCanvas.width, powerpointCanvas.height);
         context.drawImage(slide, 0, 0);
         currentIndex = index;
-        function updateSlideControls() {
-          powerpointStatus.textContent = "Slide " + (currentIndex + 1) + " of " + result.slides.length;
-          previousSlide.disabled = currentIndex <= 0;
-          nextSlide.disabled = currentIndex >= result.slides.length - 1;
-        }
-        updateSlideControls();
+        currentStep = stepIndex;
+        powerpointStatus.textContent = "Slide " + (currentIndex + 1) + " of " + frames.length
+          + (frames[currentIndex].length > 1 ? " · Step " + (currentStep + 1) + " of " + frames[currentIndex].length : "");
+        previousSlide.disabled = currentIndex <= 0 && currentStep <= 0;
+        nextSlide.disabled = currentIndex >= frames.length - 1 && currentStep >= frames[currentIndex].length - 1;
+        if (stepIndex + 1 < frames[index].length) loadFrame(index, stepIndex + 1).catch(function () {});
+        else if (index + 1 < frames.length) loadFrame(index + 1, 0).catch(function () {});
       }
-      previousSlide.addEventListener("click", function () { showSlide(Math.max(0, currentIndex - 1)).catch(function (error) { powerpointUnavailable(error.message); }); });
-      nextSlide.addEventListener("click", function () { showSlide(Math.min(result.slides.length - 1, currentIndex + 1)).catch(function (error) { powerpointUnavailable(error.message); }); });
-      await showSlide(0);
+      previousSlide.addEventListener("click", function () {
+        var targetIndex = currentIndex;
+        var targetStep = currentStep - 1;
+        if (targetStep < 0 && targetIndex > 0) {
+          targetIndex -= 1;
+          targetStep = frames[targetIndex].length - 1;
+        }
+        showFrame(targetIndex, Math.max(0, targetStep)).catch(function (error) { powerpointUnavailable(error.message); });
+      });
+      nextSlide.addEventListener("click", function () {
+        var targetIndex = currentIndex;
+        var targetStep = currentStep + 1;
+        if (targetStep >= frames[targetIndex].length && targetIndex < frames.length - 1) {
+          targetIndex += 1;
+          targetStep = 0;
+        }
+        showFrame(targetIndex, Math.min(frames[targetIndex].length - 1, targetStep)).catch(function (error) { powerpointUnavailable(error.message); });
+      });
+      await showFrame(0, 0);
     }).catch(function (error) {
       powerpointUnavailable(error && error.message ? error.message : "PowerPoint preview could not be rendered.");
     });

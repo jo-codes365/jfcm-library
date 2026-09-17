@@ -137,6 +137,17 @@ For decks that require Microsoft PowerPoint's exact renderer, export either a PD
 
 When present, this export is used as the fidelity fallback. PowerPoint-exported PNG files are copied byte-for-byte; PowerPoint-exported PDFs are rasterized page-for-page through PyMuPDF. The fallback timestamp is included in the preview cache key, so replacing an export refreshes the preview automatically.
 
+LibreOffice's PDF export is static: it flattens each slide to its final appearance and cannot preserve PowerPoint click triggers, entrance-animation motion, easing, or timing. The service inspects PPTX timing XML and logs detected on-click sequences, but it does not rebuild animated shapes in HTML or canvas. To preserve the exact visual state and order of click reveals, capture/export each state with Microsoft PowerPoint and use zero-based step filenames:
+
+```text
+<root>/<user_id>/<file_id>/slide-1-step-0.png
+<root>/<user_id>/<file_id>/slide-1-step-1.png
+<root>/<user_id>/<file_id>/slide-1-step-2.png
+<root>/<user_id>/<file_id>/slide-2-step-0.png
+```
+
+`step-0` is the initial state and each following image is the state after one click. Every slide must have `step-0`, and step numbers must be contiguous. The viewer advances and reverses these states before changing slides in both inline and fullscreen navigation. These images preserve PowerPoint-rendered pixels and click order; they cannot reproduce the transition motion between captured states. If no step images exist, the existing LibreOffice -> PDF -> PNG static preview remains unchanged.
+
 Railway is configured through `railway.json` to build the root `Dockerfile` instead of relying on Railpack package propagation. The single-stage runtime image installs LibreOffice as an APT system package, verifies `libreoffice --headless --version` while building, and sets `LIBREOFFICE_BINARY=/usr/bin/libreoffice`. Startup logs show the results of resolving both `libreoffice` and `soffice` from `PATH`. Railway environment variables can still override `LIBREOFFICE_BINARY` in the service settings. The `nixpacks.toml` remains as a fallback for platforms that still use Nixpacks.
 
 ## Event sharing migration for an existing database

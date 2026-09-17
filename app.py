@@ -53,7 +53,7 @@ if not UPLOAD_FOLDER.is_absolute():
 UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
 PRESENTATION_PREVIEW_FOLDER = UPLOAD_FOLDER / ".presentation-previews"
 PRESENTATION_PREVIEW_DPI = max(144, min(env_int("PRESENTATION_PREVIEW_DPI", 240), 360))
-PRESENTATION_PREVIEW_RENDERER_VERSION = "font-aware-v1"
+PRESENTATION_PREVIEW_RENDERER_VERSION = "animation-steps-v1"
 PRESENTATION_PRE_RENDERED_FOLDER = Path(
     os.getenv("POWERPOINT_PRE_RENDERED_FOLDER", str(UPLOAD_FOLDER / ".powerpoint-prerendered"))
 )
@@ -867,16 +867,54 @@ def presentation_fallback_files(record):
     """Return an optional Microsoft PowerPoint-exported PDF or PNG slide set."""
     owner_directory = PRESENTATION_PRE_RENDERED_FOLDER / str(int(record["user_id"]))
     slide_directory = owner_directory / str(int(record["id"]))
+    if slide_directory.is_dir():
+        step_pattern = re.compile(r"^slide-(\d+)-step-(\d+)\.png$", re.IGNORECASE)
+        step_groups = {}
+        for path in slide_directory.iterdir():
+            match = step_pattern.match(path.name) if path.is_file() else None
+            if match:
+                step_groups.setdefault(int(match.group(1)), {})[int(match.group(2))] = path
+        if step_groups:
+            ordered_groups = []
+            for slide_number in range(1, max(step_groups) + 1):
+                numbered_steps = step_groups.get(slide_number, {})
+                if 0 not in numbered_steps:
+                    app.logger.error(
+                        "Ignoring PowerPoint animation frames for file_id=%s: slide %d has no step 0",
+                        record["id"],
+                        slide_number,
+                    )
+                    ordered_groups = []
+                    break
+                ordered_steps = [numbered_steps[index] for index in range(max(numbered_steps) + 1) if index in numbered_steps]
+                if len(ordered_steps) != max(numbered_steps) + 1:
+                    app.logger.error(
+                        "Ignoring PowerPoint animation frames for file_id=%s: slide %d step numbers are not contiguous",
+                        record["id"],
+                        slide_number,
+                    )
+                    ordered_groups = []
+                    break
+                ordered_groups.append(ordered_steps)
+            if ordered_groups and len(ordered_groups) == max(step_groups):
+                return {
+                    "kind": "png-steps",
+                    "files": [path for group in ordered_groups for path in group],
+                    "step_groups": ordered_groups,
+                }
     pdf_candidates = [owner_directory / f"{int(record['id'])}.pdf", slide_directory / "slides.pdf"]
     for candidate in pdf_candidates:
         if candidate.is_file():
             return {"kind": "pdf", "files": [candidate]}
     if slide_directory.is_dir():
-        def slide_sort_key(path):
-            number = re.search(r"(\d+)$", path.stem)
-            return (0, int(number.group(1))) if number else (1, path.name.casefold())
-
-        slides = sorted(slide_directory.glob("slide-*.png"), key=slide_sort_key)
+        slide_pattern = re.compile(r"^slide-(\d+)\.png$", re.IGNORECASE)
+        numbered_slides = []
+        for path in slide_directory.iterdir():
+            match = slide_pattern.match(path.name) if path.is_file() else None
+            if match:
+                numbered_slides.append((int(match.group(1)), path))
+        numbered_slides.sort(key=lambda item: item[0])
+        slides = [path for _number, path in numbered_slides]
         if slides:
             return {"kind": "png", "files": slides}
     return None
@@ -922,6 +960,96 @@ def pptx_font_names(path):
     return sorted(fonts, key=str.casefold), embedded_font_count
 
 
+def pptx_animation_sequences(path):
+    """Inspect OOXML timing metadata without attempting to render its effects."""
+    import xml.etree.ElementTree as element_tree
+
+    sequences = {}
+    slide_pattern = re.compile(r"^ppt/slides/slide(\d+)\.xml$")
+    try:
+        with zipfile.ZipFile(path) as archive:
+            slide_parts = []
+            for name in archive.namelist():
+                match = slide_pattern.match(name)
+                if match:
+                    slide_parts.append((int(match.group(1)), name))
+            for slide_number, name in sorted(slide_parts):
+                try:
+                    root = element_tree.fromstring(archive.read(name))
+                except (KeyError, element_tree.ParseError):
+                    continue
+                shape_names = {}
+                for element in root.iter():
+                    if element.tag.rsplit("}", 1)[-1] == "cNvPr" and element.attrib.get("id"):
+                        shape_names[element.attrib["id"]] = element.attrib.get("name") or f"Shape {element.attrib['id']}"
+                main_sequences = [
+                    element for element in root.iter()
+                    if element.tag.rsplit("}", 1)[-1] == "cTn" and element.attrib.get("nodeType") == "mainSeq"
+                ]
+                steps = []
+                for main_sequence in main_sequences:
+                    parent_map = {child: parent for parent in main_sequence.iter() for child in list(parent)}
+                    triggered_nodes = []
+                    for candidate in main_sequence.iter():
+                        if candidate is main_sequence or candidate.tag.rsplit("}", 1)[-1] != "cTn":
+                            continue
+                        has_click_trigger = any(
+                            condition.tag.rsplit("}", 1)[-1] == "cond"
+                            and condition.attrib.get("evt") in {"onNext", "onClick"}
+                            for child in list(candidate)
+                            if child.tag.rsplit("}", 1)[-1] == "stCondLst"
+                            for condition in child.iter()
+                        )
+                        if has_click_trigger:
+                            triggered_nodes.append(candidate)
+                    triggered_set = set(triggered_nodes)
+                    click_groups = []
+                    for candidate in triggered_nodes:
+                        ancestor = parent_map.get(candidate)
+                        while ancestor is not None and ancestor is not main_sequence and ancestor not in triggered_set:
+                            ancestor = parent_map.get(ancestor)
+                        if ancestor not in triggered_set:
+                            click_groups.append(candidate)
+                    if not click_groups:
+                        click_groups = [
+                            element for element in main_sequence.iter()
+                            if element.tag.rsplit("}", 1)[-1] == "cTn"
+                            and element.attrib.get("nodeType") == "clickEffect"
+                        ]
+                    for click_group in click_groups:
+                        targets = []
+                        effects = []
+                        for element in click_group.iter():
+                            local_name = element.tag.rsplit("}", 1)[-1]
+                            if local_name == "spTgt" and element.attrib.get("spid"):
+                                shape_id = element.attrib["spid"]
+                                target = {"shape_id": shape_id, "name": shape_names.get(shape_id, f"Shape {shape_id}")}
+                                if target not in targets:
+                                    targets.append(target)
+                            elif local_name == "animEffect":
+                                effect = element.attrib.get("filter") or element.attrib.get("transition") or "effect"
+                                if effect not in effects:
+                                    effects.append(effect)
+                            elif local_name == "animMotion" and "motion" not in effects:
+                                effects.append("motion")
+                            elif local_name == "set" and "appear/state" not in effects:
+                                effects.append("appear/state")
+                            elif local_name == "anim" and "property animation" not in effects:
+                                effects.append("property animation")
+                        steps.append({"targets": targets, "effects": effects})
+                if not steps:
+                    click_effects = [
+                        element for element in root.iter()
+                        if element.tag.rsplit("}", 1)[-1] == "cTn" and element.attrib.get("nodeType") == "clickEffect"
+                    ]
+                    steps = [{"targets": [], "effects": []} for _element in click_effects]
+                if steps:
+                    sequences[slide_number] = {"click_steps": len(steps), "steps": steps}
+    except (OSError, zipfile.BadZipFile) as error:
+        app.logger.warning("Could not inspect presentation animation timing in %s: %s", path.name, error)
+    return sequences
+
+
 def convert_legacy_presentation_for_font_inspection(source, work_directory, profile_directory):
     inspection_directory = work_directory / "font-inspection"
     inspection_directory.mkdir()
@@ -962,7 +1090,11 @@ def log_presentation_font_report(source, work_directory, profile_directory):
             inspection_source = None
     if not inspection_source or inspection_source.suffix.lower() not in {".pptx", ".ppsx"}:
         app.logger.warning("Font inspection is unavailable for presentation format %s", source.suffix.lower())
-        return
+        return {}
+
+    animation_sequences = pptx_animation_sequences(inspection_source)
+    if animation_sequences:
+        app.logger.info("PowerPoint on-click animation sequences detected: source=%s slides=%s", source.name, animation_sequences)
 
     fonts, embedded_font_count = pptx_font_names(inspection_source)
     app.logger.info(
@@ -974,7 +1106,7 @@ def log_presentation_font_report(source, work_directory, profile_directory):
     font_match_binary = shutil.which("fc-match")
     if not font_match_binary:
         app.logger.warning("Font substitution diagnostics unavailable because fc-match is not on PATH")
-        return
+        return animation_sequences
     for requested_font in fonts:
         try:
             match = subprocess.run(
@@ -1000,6 +1132,7 @@ def log_presentation_font_report(source, work_directory, profile_directory):
             )
         else:
             app.logger.info("Presentation font available: requested=%r file=%r", requested_font, matched_file)
+    return animation_sequences
 
 
 _FONTCONFIG_SIGNATURE = None
@@ -1084,9 +1217,11 @@ def rasterize_presentation_pdf(pdf_path, cache_directory, pymupdf, renderer):
         "width": page_manifest[0]["width"],
         "height": page_manifest[0]["height"],
         "slides": slide_names,
+        "steps": [[slide_name] for slide_name in slide_names],
         "pages": page_manifest,
         "dpi": PRESENTATION_PREVIEW_DPI,
         "renderer": renderer,
+        "animation_mode": "static-final-frame",
     }
 
 
@@ -1106,9 +1241,47 @@ def copy_prerendered_png_slides(slides, cache_directory):
         "width": page_manifest[0]["width"],
         "height": page_manifest[0]["height"],
         "slides": slide_names,
+        "steps": [[slide_name] for slide_name in slide_names],
         "pages": page_manifest,
         "dpi": None,
         "renderer": "microsoft-powerpoint-png-export",
+        "animation_mode": "static-final-frame",
+    }
+
+
+def copy_prerendered_png_steps(step_groups, cache_directory):
+    slide_names = []
+    cached_step_groups = []
+    page_manifest = []
+    for slide_index, source_steps in enumerate(step_groups, start=1):
+        cached_steps = []
+        expected_dimensions = None
+        for step_index, source_step in enumerate(source_steps):
+            dimensions = png_pixel_dimensions(source_step)
+            if expected_dimensions is None:
+                expected_dimensions = dimensions
+            elif dimensions != expected_dimensions:
+                raise PresentationPreviewError(
+                    f"Pre-rendered animation frames for slide {slide_index} do not have matching dimensions."
+                )
+            step_name = f"slide-{slide_index}-step-{step_index}.png"
+            temporary_step = cache_directory / f".{step_name}.tmp"
+            shutil.copyfile(source_step, temporary_step)
+            temporary_step.replace(cache_directory / step_name)
+            cached_steps.append(step_name)
+        slide_names.append(cached_steps[0])
+        cached_step_groups.append(cached_steps)
+        page_manifest.append({"file": cached_steps[0], "width": expected_dimensions[0], "height": expected_dimensions[1]})
+    return {
+        "slide_count": len(slide_names),
+        "width": page_manifest[0]["width"],
+        "height": page_manifest[0]["height"],
+        "slides": slide_names,
+        "steps": cached_step_groups,
+        "pages": page_manifest,
+        "dpi": None,
+        "renderer": "microsoft-powerpoint-animation-frames",
+        "animation_mode": "pre-rendered-click-steps",
     }
 
 
@@ -1119,7 +1292,10 @@ def render_presentation_preview(record):
     if manifest_path.is_file():
         try:
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            if manifest.get("slide_count") and all((cache_directory / name).is_file() for name in manifest.get("slides", [])):
+            cached_frames = [
+                name for group in manifest.get("steps", []) for name in group
+            ] or manifest.get("slides", [])
+            if manifest.get("slide_count") and cached_frames and all((cache_directory / name).is_file() for name in cached_frames):
                 return cache_directory, manifest
         except (OSError, ValueError, TypeError):
             pass
@@ -1148,10 +1324,28 @@ def render_presentation_preview(record):
                     manifest = rasterize_presentation_pdf(
                         fallback["files"][0], cache_directory, pymupdf, "microsoft-powerpoint-pdf-export"
                     )
+                elif fallback["kind"] == "png-steps":
+                    manifest = copy_prerendered_png_steps(fallback["step_groups"], cache_directory)
                 else:
                     manifest = copy_prerendered_png_slides(fallback["files"], cache_directory)
+                if source.suffix.lower() in {".pptx", ".ppsx"}:
+                    animation_sequences = pptx_animation_sequences(source)
+                    manifest["animation_sequences"] = animation_sequences
+                    if fallback["kind"] == "png-steps":
+                        for slide_number, sequence in animation_sequences.items():
+                            actual_frames = len(manifest["steps"][slide_number - 1]) if slide_number <= len(manifest["steps"]) else 0
+                            expected_frames = sequence["click_steps"] + 1
+                            if actual_frames != expected_frames:
+                                app.logger.warning(
+                                    "PowerPoint animation frame count differs from detected timing: file_id=%s slide=%d "
+                                    "expected_frames=%d actual_frames=%d",
+                                    record["id"],
+                                    slide_number,
+                                    expected_frames,
+                                    actual_frames,
+                                )
             else:
-                log_presentation_font_report(source, work_directory, profile_directory)
+                animation_sequences = log_presentation_font_report(source, work_directory, profile_directory)
                 result = subprocess.run(
                     [
                         libreoffice_binary(),
@@ -1183,6 +1377,14 @@ def render_presentation_preview(record):
                         "A Microsoft PowerPoint-exported PDF or PNG fallback can be configured."
                     )
                 manifest = rasterize_presentation_pdf(pdf_files[0], cache_directory, pymupdf, "libreoffice-pdf")
+                manifest["animation_sequences"] = animation_sequences
+                if animation_sequences:
+                    app.logger.warning(
+                        "LibreOffice PDF export flattened %d slide(s) containing on-click animation sequences for file_id=%s. "
+                        "Use slide-N-step-M.png PowerPoint exports to preserve click states.",
+                        len(animation_sequences),
+                        record["id"],
+                    )
     except subprocess.TimeoutExpired as error:
         raise PresentationPreviewError("The presentation preview took too long to render.") from error
     except OSError as error:
@@ -2590,6 +2792,7 @@ def presentation_preview_manifest(file_id):
     except PresentationPreviewError as error:
         return jsonify({"ok": False, "error": str(error)}), 503
     params = presentation_share_params(share_context)
+    step_names = manifest.get("steps") or [[name] for name in manifest["slides"]]
     return jsonify({
         "ok": True,
         "slide_count": manifest["slide_count"],
@@ -2598,9 +2801,24 @@ def presentation_preview_manifest(file_id):
         "pages": manifest.get("pages", []),
         "dpi": manifest.get("dpi"),
         "renderer": manifest.get("renderer", "libreoffice-pdf"),
+        "animation_mode": manifest.get("animation_mode", "static-final-frame"),
+        "animation_sequences": manifest.get("animation_sequences", {}),
         "slides": [
             url_for("presentation_preview_slide", file_id=file_id, slide_number=index, **params)
             for index in range(1, manifest["slide_count"] + 1)
+        ],
+        "steps": [
+            [
+                url_for(
+                    "presentation_preview_step",
+                    file_id=file_id,
+                    slide_number=slide_index,
+                    step_number=step_index,
+                    **params,
+                )
+                for step_index in range(len(slide_steps))
+            ]
+            for slide_index, slide_steps in enumerate(step_names, start=1)
         ],
     })
 
@@ -2625,6 +2843,38 @@ def presentation_preview_slide(file_id, slide_number):
     response = send_from_directory(
         cache_directory,
         manifest["slides"][slide_number - 1],
+        mimetype="image/png",
+        conditional=True,
+        max_age=86400,
+    )
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
+@app.get("/presentation-preview/<int:file_id>/slide/<int:slide_number>/step/<int:step_number>")
+@login_or_public_link_required
+def presentation_preview_step(file_id, slide_number, step_number):
+    share_context = request_share_context()
+    try:
+        record = accessible_file(file_id, share_context=share_context)
+    except MySQLError:
+        app.logger.exception("Presentation animation frame database error")
+        abort(500)
+    if not record or preview_kind(record) != "powerpoint":
+        abort(404)
+    try:
+        cache_directory, manifest = render_presentation_preview(record)
+    except PresentationPreviewError:
+        abort(503)
+    step_groups = manifest.get("steps") or [[name] for name in manifest.get("slides", [])]
+    if slide_number < 1 or slide_number > len(step_groups):
+        abort(404)
+    slide_steps = step_groups[slide_number - 1]
+    if step_number < 0 or step_number >= len(slide_steps):
+        abort(404)
+    response = send_from_directory(
+        cache_directory,
+        slide_steps[step_number],
         mimetype="image/png",
         conditional=True,
         max_age=86400,

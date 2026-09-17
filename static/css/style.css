@@ -3878,7 +3878,52 @@ button {
   .file-workspace.mobile-select-mode .folder-content-card .card-item-select { display: block; }
 }
 @media (max-width: 480px) {
-  .folder-image-grid { grid-template-columns: 1fr; }
+  .folder-image-grid,
+  .folder-carousel-track {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+  .folder-carousel-viewport {
+    height: auto !important;
+    overflow: visible;
+  }
+  .folder-carousel-track {
+    transform: none !important;
+  }
+  .folder-carousel-track .folder-content-card {
+    width: 100%;
+    min-width: 0;
+  }
+  .file-workspace.mobile-select-mode .folder-content-card .card-item-select {
+    top: 14px;
+    left: 12px;
+    display: block;
+    width: 18px;
+    height: 18px;
+    min-height: 18px;
+    transform: none;
+  }
+  .file-workspace.mobile-select-mode .folder-content-card--video {
+    padding-top: 44px;
+  }
+  .file-workspace.mobile-select-mode .folder-content-card--video .card-actions {
+    top: 7px;
+  }
+  .folder-content-card--video .card-actions .actions2 {
+    gap: 2px;
+  }
+  .folder-content-card--video .card-actions .row-action {
+    padding-right: 5px;
+    padding-left: 5px;
+  }
+  .folder-carousel-controls {
+    display: none;
+  }
+  .folder-image-grid .media-card-preview,
+  .folder-carousel-track .media-card-preview {
+    height: clamp(110px, 36vw, 160px);
+  }
   .inline-presentation-header { gap: 8px; }
 }
 .download-action:hover {
@@ -4164,7 +4209,7 @@ hr {
     .workspace-skeleton-media-grid,
     .workspace-skeleton-media-grid--videos {
         display: grid;
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .workspace-skeleton-media-grid--videos .workspace-skeleton-media-card {
