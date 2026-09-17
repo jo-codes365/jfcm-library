@@ -840,6 +840,15 @@ def libreoffice_binary():
     return _LIBREOFFICE_BINARY_PATH
 
 
+def log_libreoffice_path_debug():
+    app.logger.info(
+        "LibreOffice PATH lookup: libreoffice=%r, soffice=%r",
+        shutil.which("libreoffice"),
+        shutil.which("soffice"),
+    )
+
+
+log_libreoffice_path_debug()
 try:
     libreoffice_binary()
 except PresentationPreviewError:

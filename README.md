@@ -126,7 +126,7 @@ apt-get install libreoffice
 
 For the closest font match, install the fonts used by uploaded presentations on the server. Rendered previews are cached under `uploads/.presentation-previews`; these derivative files do not replace or alter uploads.
 
-The included `nixpacks.toml` installs the LibreOffice Nix package into the runtime image and sets `LIBREOFFICE_BINARY=libreoffice`. Railway environment variables have higher priority, so the executable can still be overridden in the service settings.
+The included `nixpacks.toml` installs LibreOffice as an APT system package in the runtime image and sets `LIBREOFFICE_BINARY=libreoffice`. Railway environment variables have higher priority, so the executable can still be overridden in the service settings. Startup logs show the results of resolving both `libreoffice` and `soffice` from `PATH`; the deployed container should successfully run `libreoffice --headless --version`.
 
 ## Event sharing migration for an existing database
 
