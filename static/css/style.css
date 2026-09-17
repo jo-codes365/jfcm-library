@@ -3616,13 +3616,13 @@ button {
   overflow: hidden;
   padding: 7px;
   border: 1px solid transparent;
-  background: #f8faf9;
+  background: #f3f7f4;
   transition: background-color .15s ease, border-color .15s ease;
 }
 @media (hover: hover) and (pointer: fine) {
   .folder-image-grid .folder-content-card--image:hover {
-    border-color: #dce5de;
-    background: #f3f7f4;
+    border-color: #bbd4c1;
+    background: #e8f2ea;
   }
 }
 .folder-content-card--image > .card-item-select {
