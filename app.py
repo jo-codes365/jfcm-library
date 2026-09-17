@@ -2165,7 +2165,15 @@ def public_sidebar_events():
             "WHERE is_deleted = FALSE AND share_token IS NOT NULL AND share_token <> '' "
             "ORDER BY event_date DESC, name"
         )
-        return cursor.fetchall()
+        events = cursor.fetchall()
+        for event in events:
+            app.logger.info(
+                "Public Event sidebar entry: event_id=%s share_token=%s url=%s",
+                event["id"],
+                event["share_token"],
+                url_for("public_event_workspace", event_id=event["id"], share_token=event["share_token"]),
+            )
+        return events
     except MySQLError:
         app.logger.exception("Public Events sidebar database error")
         return []
@@ -3508,6 +3516,12 @@ def public_event_context(event_id, share_token):
         "WHERE id = %s AND share_token = %s AND is_deleted = FALSE",
         (event_id, share_token),
     )
+    app.logger.info(
+        "Public Event database lookup: event_id=%s share_token=%s result=%s",
+        event_id,
+        share_token,
+        {"id": record["id"], "user_id": record["user_id"], "token_present": bool(record["share_token"])} if record else None,
+    )
     if not record:
         return None
     return {
@@ -3521,6 +3535,13 @@ def public_event_context(event_id, share_token):
 
 @app.get("/public-events/<int:event_id>/<share_token>")
 def public_event_workspace(event_id, share_token):
+    app.logger.info(
+        "Public Event request: event_id=%s share_token=%s path=%s authenticated=%s",
+        event_id,
+        share_token,
+        request.path,
+        "user_id" in session,
+    )
     share_context = public_event_context(event_id, share_token)
     if not share_context:
         abort(404)
@@ -3576,6 +3597,15 @@ def render_public_event_workspace(event_id, share_context):
             (share_context["owner_id"], event_id, current_folder_id),
         )
         files = cursor.fetchall()
+        app.logger.info(
+            "Public Event scoped content: event_id=%s owner_id=%s folder_id=%s folders=%d files=%d path=%s",
+            event_id,
+            share_context["owner_id"],
+            current_folder_id,
+            len(folders),
+            len(files),
+            request.path,
+        )
         cursor.execute("SELECT id, name FROM folders WHERE user_id = %s AND is_deleted = FALSE AND event_id = %s ORDER BY name", (share_context["owner_id"], event_id))
         move_folders = [folder for folder in cursor.fetchall() if accessible_folder(folder["id"], require_owner=True, share_context=share_context)]
         cursor.execute("SELECT id, name, parent_id FROM folders WHERE user_id = %s AND is_deleted = FALSE AND event_id = %s", (share_context["owner_id"], event_id))
@@ -3624,6 +3654,9 @@ def render_public_event_workspace(event_id, share_context):
         month=date.today().month,
         weeks=sunday_first_month_weeks(date.today().year, date.today().month),
         events_by_day={},
+        calendar_previous_url=None,
+        calendar_next_url=None,
+        calendar_day_urls={},
     )
 
 
@@ -3646,6 +3679,15 @@ def not_found(_error):
 
 @app.errorhandler(500)
 def server_error(_error):
+    original_error = getattr(_error, "original_exception", None)
+    if original_error:
+        app.logger.error(
+            "Unhandled server exception for path=%s",
+            request.path,
+            exc_info=(type(original_error), original_error, original_error.__traceback__),
+        )
+    else:
+        app.logger.error("Server error response for path=%s: %s", request.path, _error)
     return render_template("error.html", message="Something went wrong. Please try again later."), 500
 
 
