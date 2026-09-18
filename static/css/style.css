@@ -684,6 +684,7 @@ input:focus {
 .title-filter {
   display: flex;
   flex-direction: row;
+  align-items: center;
   gap: 10px;
 }
 .panel {
@@ -2037,6 +2038,9 @@ table tbody tr:nth-child(even) {
   overflow: hidden;
   font-size: 0.75rem;
   white-space: nowrap;
+}
+.sidebar-link.events-sublink.active {
+  font-weight: 500;
 }
 .sidebar-event-icon {
   width: 20px;
