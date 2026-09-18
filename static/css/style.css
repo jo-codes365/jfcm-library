@@ -108,8 +108,7 @@ h2 {
 }
 
 .auth-page.login-page,
-.auth-page.register-page,
-.legal-page {
+.auth-page.register-page {
   background:
     linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.7)),
     url("../images/jfcm.png") center / cover no-repeat;
@@ -161,6 +160,7 @@ h2 {
 .legal-page {
   min-height: 100vh;
   padding: 24px;
+  background: #fff;
 }
 .legal-header,
 .legal-card,
@@ -174,9 +174,6 @@ h2 {
   justify-content: space-between;
   gap: 20px;
   margin-bottom: 22px;
-}
-.legal-header .brand {
-  color: #fff;
 }
 .legal-card {
   padding: clamp(28px, 5vw, 52px);
@@ -288,16 +285,6 @@ h2 {
 }
 .legal-page-footer {
   padding: 22px 0 4px;
-}
-.legal-page-footer .legal-links {
-  color: rgba(255, 255, 255, .65);
-}
-.legal-page-footer .legal-links a {
-  color: rgba(255, 255, 255, .9);
-}
-.legal-page-footer .legal-links a:hover,
-.legal-page-footer .legal-links a[aria-current="page"] {
-  color: #fff;
 }
 @media (max-width: 600px) {
   .legal-page {
