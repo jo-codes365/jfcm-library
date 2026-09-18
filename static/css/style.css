@@ -4047,6 +4047,9 @@ button {
 .inline-presentation-open[data-presentation-fullscreen] {
   border-radius: 6px !important;
 }
+.inline-presentation-open[data-presentation-fullscreen] .bi-arrows-fullscreen {
+  -webkit-text-stroke: 0.25px currentColor;
+}
 .inline-presentation-preview {
   width: 100%;
 }
