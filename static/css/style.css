@@ -2045,7 +2045,7 @@ table tbody tr:nth-child(even) {
   flex: 0 0 auto;
 }
 .events-sublink.active:is([data-event-type="fellowship"], [data-event-type="camp"]) .sidebar-event-icon {
-  filter: saturate(0%) brightness(170%);
+  filter: saturate(0%) brightness(10%);
 }
 .sidebar-event-name {
   min-width: 0;
