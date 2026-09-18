@@ -21,7 +21,7 @@
         </div>
         <div id="events-submenu" class="events-submenu">
           {% for event in sidebar_events %}
-          <a class="sidebar-link events-sublink {% if current_event and current_event.id == event.id %}active{% endif %}" href="{{ url_for('public_event_workspace', event_id=event.id, share_token=event.share_token) }}"><img class="sidebar-event-icon" src="{{ url_for('static', filename='images/' ~ event_icon_file(event.event_type)) }}" alt=""><span class="sidebar-event-name">{{ display_name(event.name) }}</span></a>
+          <a class="sidebar-link events-sublink {% if current_event and current_event.id == event.id %}active{% endif %}" data-event-type="{{ event.event_type|default('event', true)|lower }}" href="{{ url_for('public_event_workspace', event_id=event.id, share_token=event.share_token) }}"><img class="sidebar-event-icon" src="{{ url_for('static', filename='images/' ~ event_icon_file(event.event_type)) }}" alt=""><span class="sidebar-event-name">{{ display_name(event.name) }}</span></a>
           {% else %}
           <span class="sidebar-link events-sublink muted">No events yet</span>
           {% endfor %}
@@ -68,7 +68,7 @@
         </div>
         <div id="events-submenu" class="events-submenu">
           {% for event in sidebar_events %}
-          <a class="sidebar-link events-sublink {% if section == 'events' and event_id == event.id %}active{% endif %}" href="{{ url_for('dashboard', section='events', event=event.id) }}"><img class="sidebar-event-icon" src="{{ url_for('static', filename='images/' ~ event_icon_file(event.event_type)) }}" alt=""><span class="sidebar-event-name">{{ display_name(event.name) }}</span></a>
+          <a class="sidebar-link events-sublink {% if section == 'events' and event_id == event.id %}active{% endif %}" data-event-type="{{ event.event_type|default('event', true)|lower }}" href="{{ url_for('dashboard', section='events', event=event.id) }}"><img class="sidebar-event-icon" src="{{ url_for('static', filename='images/' ~ event_icon_file(event.event_type)) }}" alt=""><span class="sidebar-event-name">{{ display_name(event.name) }}</span></a>
           {% else %}
           <span class="sidebar-link events-sublink muted">No events yet</span>
           {% endfor %}
@@ -435,7 +435,7 @@
 
               {% if folder_groups.images %}
               <section class="folder-content-section folder-image-section" data-folder-section>
-                <div class="folder-section-heading"><div><h2>Images</h2></div></div>
+                <div class="folder-section-heading"><div><h2>Gallery</h2></div></div>
                 <div class="folder-image-grid">
                   {% for item in items if item.kind == 'file' and file_type_key(item) == 'image' %}{{ dashboard_items.item_card(item, 'image') }}{% endfor %}
                 </div>
