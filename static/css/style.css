@@ -2704,6 +2704,7 @@ table tbody tr:nth-child(even) {
   align-items: center;
   gap: 6px;
   margin-left: 2px;
+  margin-bottom: 5px;
   color: #6b7280;
   font-size: .82rem;
   white-space: nowrap;
