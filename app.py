@@ -2002,7 +2002,7 @@ def dashboard():
         )
         items = ([{"kind": "folder", "name": item["name"], "date": item["created_at"], "mime_type": "Folder", "location": paths.get(item["parent_id"], workspace_root_location), **item} for item in folders] +
                  [{"kind": "file", "name": item["original_filename"], "parent_id": item["folder_id"], "date": item["uploaded_at"], "location": paths.get(item["folder_id"], workspace_root_location), **item} for item in files] +
-                 [{"kind": "event", "parent_id": None, "size": 0, "file_size": 0, "mime_type": "Event", "location": "Events", **item, "date": item["deleted_at"] if deleted else item["event_date"]} for item in (events if (section == "events" and event_id is None) or section == "trash" else [])])
+                 [{"kind": "event", "parent_id": None, "size": 0, "file_size": 0, "mime_type": "Event", "location": "Events", **item, "date": item["deleted_at"] if deleted else item["created_at"]} for item in (events if (section == "events" and event_id is None) or section == "trash" else [])])
         for item in items:
             location_folder_id = item["parent_id"]
             if deleted:
@@ -2301,7 +2301,7 @@ def public_events():
             "file_size": 0,
             "mime_type": "Event",
             "location": "Events",
-            "date": item["event_date"],
+            "date": item["created_at"],
             "accessed_at": None,
             "is_starred": False,
             **item,

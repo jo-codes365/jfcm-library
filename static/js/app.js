@@ -2089,7 +2089,6 @@ document.addEventListener("DOMContentLoaded", function () {
   var copyItemLink = document.getElementById("copy-item-link");
   var renameItemButton = document.getElementById("rename-item");
   var renameItemLabel = document.getElementById("rename-item-label");
-  var editItemChevron = document.getElementById("edit-item-chevron");
   var starItemButton = document.getElementById("star-item");
   var moveItemButton = document.getElementById("move-item");
   var downloadItem = document.getElementById("download-item");
@@ -2199,7 +2198,6 @@ document.addEventListener("DOMContentLoaded", function () {
     itemActionsName.textContent = name;
     itemActionsTitle.textContent = row.dataset.kind === "folder" ? "Folder actions" : row.dataset.kind === "event" ? "Event actions" : "File actions";
     if (renameItemLabel) renameItemLabel.textContent = row.dataset.kind === "event" ? "Edit" : "Rename";
-    if (editItemChevron) editItemChevron.hidden = row.dataset.kind !== "event";
     if (moveItemButton) moveItemButton.hidden = row.dataset.kind === "event";
     if (openItem) {
       openItem.href = row.dataset.openUrl || "#";

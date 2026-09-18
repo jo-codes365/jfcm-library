@@ -1244,9 +1244,6 @@ table tbody tr:nth-child(even) {
   margin-left: auto;
   font-size: 0.78rem;
 }
-.norms .action-chevron[hidden] {
-  display: none;
-}
 .norms#delete-item:hover {
   color: var(--danger-dark);
   background: #ffe6e6;
@@ -1968,13 +1965,22 @@ table tbody tr:nth-child(even) {
 .events-sublink {
   min-height: 34px;
   padding: 7px 20px 7px 40px;
-  font-size: 0.8rem;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.7rem;
+  white-space: nowrap;
 }
 .sidebar-event-icon {
   width: 20px;
   height: 20px;
   object-fit: contain;
   flex: 0 0 auto;
+}
+.sidebar-event-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .trash:hover {
   background: #ffe6e6;
@@ -2617,6 +2623,16 @@ table tbody tr:nth-child(even) {
   margin: 0 0 5px;
   font-size: 1.4rem;
   color: #1f2937;
+}
+.event-workspace-created {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 2px;
+  color: #6b7280;
+  font-size: .82rem;
+  font-weight: 600;
+  white-space: nowrap;
 }
 .workspace-event-title {
   display: inline-flex;
