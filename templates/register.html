@@ -31,6 +31,7 @@
       <button class="button log" type="submit">Create account</button>
     </form>
     <p class="auth-switch">Already have an account? <a href="{{ url_for('login') }}" class="acc">Sign in</a></p>
+    {% include "_legal_links.html" %}
   </section>
 </main>
 {% endblock %}

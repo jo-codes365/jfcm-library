@@ -767,6 +767,8 @@ document.addEventListener("DOMContentLoaded", function () {
   var previewRenameButton = document.getElementById("preview-rename-button");
   var previewMoveButton = document.getElementById("preview-move-button");
   var previewMoveDestination = document.getElementById("preview-move-destination");
+  var previewMoveDestinationTree = document.getElementById("preview-move-destination-tree");
+  var confirmPreviewMove = document.getElementById("confirm-preview-move");
   var previewPropertiesButton = document.getElementById("preview-properties-button");
   if (previewMoreButton && previewMoreMenu) {
     previewMoreButton.addEventListener("click", function (event) {
@@ -799,8 +801,41 @@ document.addEventListener("DOMContentLoaded", function () {
     if (input) { input.focus(); input.select(); }
   });
   if (previewMoveButton) previewMoveButton.addEventListener("click", function () {
+    var options = previewMoveDestinationTree ? Array.from(previewMoveDestinationTree.querySelectorAll(".move-destination-option")) : [];
+    var currentDestination = previewMoveDestinationTree ? previewMoveDestinationTree.dataset.currentDestination : "";
+    var sourceEventId = previewMoveDestinationTree ? previewMoveDestinationTree.dataset.sourceEventId : "";
+    options.forEach(function (option) {
+      var unavailableForWorkspace = sourceEventId
+        ? !option.dataset.eventId || option.dataset.eventId === sourceEventId
+        : false;
+      var invalid = unavailableForWorkspace || option.dataset.destinationValue === currentDestination;
+      option.hidden = unavailableForWorkspace;
+      option.disabled = invalid;
+      option.classList.toggle("is-disabled", invalid);
+      option.classList.remove("is-selected");
+      option.setAttribute("aria-disabled", String(invalid));
+      option.setAttribute("aria-selected", "false");
+    });
+    var firstDestination = options.find(function (option) { return !option.disabled; });
+    if (previewMoveDestination) previewMoveDestination.value = firstDestination ? firstDestination.dataset.destinationValue : "";
+    if (firstDestination) {
+      firstDestination.classList.add("is-selected");
+      firstDestination.setAttribute("aria-selected", "true");
+    }
+    if (confirmPreviewMove) confirmPreviewMove.disabled = !firstDestination;
     togglePreviewModal("preview-move-modal", true);
-    if (previewMoveDestination) previewMoveDestination.focus();
+    if (firstDestination) firstDestination.focus();
+  });
+  if (previewMoveDestinationTree) previewMoveDestinationTree.addEventListener("click", function (event) {
+    var option = event.target.closest(".move-destination-option");
+    if (!option || option.disabled || !previewMoveDestination) return;
+    previewMoveDestination.value = option.dataset.destinationValue || "";
+    previewMoveDestinationTree.querySelectorAll(".move-destination-option").forEach(function (candidate) {
+      var selected = candidate === option;
+      candidate.classList.toggle("is-selected", selected);
+      candidate.setAttribute("aria-selected", String(selected));
+    });
+    if (confirmPreviewMove) confirmPreviewMove.disabled = !previewMoveDestination.value;
   });
   if (previewPropertiesButton) previewPropertiesButton.addEventListener("click", function () {
     togglePreviewModal("preview-properties-modal", true);
@@ -2054,6 +2089,7 @@ document.addEventListener("DOMContentLoaded", function () {
   var copyItemLink = document.getElementById("copy-item-link");
   var renameItemButton = document.getElementById("rename-item");
   var renameItemLabel = document.getElementById("rename-item-label");
+  var editItemChevron = document.getElementById("edit-item-chevron");
   var starItemButton = document.getElementById("star-item");
   var moveItemButton = document.getElementById("move-item");
   var downloadItem = document.getElementById("download-item");
@@ -2163,6 +2199,8 @@ document.addEventListener("DOMContentLoaded", function () {
     itemActionsName.textContent = name;
     itemActionsTitle.textContent = row.dataset.kind === "folder" ? "Folder actions" : row.dataset.kind === "event" ? "Event actions" : "File actions";
     if (renameItemLabel) renameItemLabel.textContent = row.dataset.kind === "event" ? "Edit" : "Rename";
+    if (editItemChevron) editItemChevron.hidden = row.dataset.kind !== "event";
+    if (moveItemButton) moveItemButton.hidden = row.dataset.kind === "event";
     if (openItem) {
       openItem.href = row.dataset.openUrl || "#";
       openItem.hidden = !row.dataset.openUrl;
@@ -2508,27 +2546,62 @@ document.addEventListener("DOMContentLoaded", function () {
   var moveForm = document.getElementById("move-form");
   var cancelMove = document.getElementById("cancel-move");
   var moveDestination = document.getElementById("move-destination");
+  var moveDestinationTree = document.getElementById("move-destination-tree");
+  var confirmMove = document.getElementById("confirm-move");
   function closeMoveModal() {
     hideTemporary(moveModal);
   }
+  function selectMoveDestination(option) {
+    if (!moveDestination || !option || option.disabled) return;
+    moveDestination.value = option.dataset.destinationValue || "";
+    if (moveDestinationTree) moveDestinationTree.querySelectorAll(".move-destination-option").forEach(function (candidate) {
+      var selected = candidate === option;
+      candidate.classList.toggle("is-selected", selected);
+      candidate.setAttribute("aria-selected", String(selected));
+    });
+    if (confirmMove) confirmMove.disabled = !moveDestination.value;
+  }
   function openMoveModal(selections) {
-    if (!moveModal || !moveDestination || !selections.length) return;
+    if (!moveModal || !moveDestination || !moveDestinationTree || !selections.length) return;
+    if (selections.some(function (input) { return input.value.indexOf("event:") === 0; })) {
+      showToast("Events cannot be moved into another destination.", "error");
+      return;
+    }
     var currentLocations = selections.map(function (input) {
       var row = input.closest(".workspace-item, tr");
-      return row ? (row.dataset.parentId || "root") : "";
+      return row ? (row.dataset.currentDestination || "") : "";
     });
     var selectedFolderIds = selections.filter(function (input) { return input.value.indexOf("folder:") === 0; }).map(function (input) {
       return input.value.split(":")[1];
     });
-    Array.from(moveDestination.options).forEach(function (option) {
-      option.hidden = currentLocations.includes(option.value) || selectedFolderIds.includes(option.value);
-      option.disabled = option.hidden;
+    var isEventWorkspace = moveForm && moveForm.dataset.eventWorkspace === "true";
+    var currentEventId = moveForm ? moveForm.dataset.currentEventId : "";
+    var options = Array.from(moveDestinationTree.querySelectorAll(".move-destination-option"));
+    options.forEach(function (option) {
+      var ancestorIds = (option.dataset.ancestorIds || "").split(",").filter(Boolean);
+      var unavailableForWorkspace = isEventWorkspace
+        && (!option.dataset.eventId || option.dataset.eventId === currentEventId);
+      var invalid = unavailableForWorkspace
+        || currentLocations.includes(option.dataset.destinationValue)
+        || selectedFolderIds.includes(option.dataset.folderId)
+        || selectedFolderIds.some(function (folderId) { return ancestorIds.includes(folderId); });
+      option.hidden = unavailableForWorkspace;
+      option.disabled = invalid;
+      option.classList.toggle("is-disabled", invalid);
+      option.setAttribute("aria-disabled", String(invalid));
+      option.classList.remove("is-selected");
+      option.setAttribute("aria-selected", "false");
     });
-    var availableDestination = Array.from(moveDestination.options).find(function (option) { return !option.hidden; });
-    if (!availableDestination) return;
-    moveDestination.value = availableDestination.value;
+    moveDestination.value = "";
+    if (confirmMove) confirmMove.disabled = true;
+    var availableDestination = options.find(function (option) { return !option.disabled; });
+    if (!availableDestination) {
+      showToast(isEventWorkspace ? "No other Event destination is available." : "No valid move destination is available.", "error");
+      return;
+    }
+    selectMoveDestination(availableDestination);
     showTemporary(moveModal);
-    moveDestination.focus();
+    availableDestination.focus();
   }
   function closeBulkActions() {
     hideTemporary(bulkActionsModal);
@@ -2556,11 +2629,23 @@ document.addEventListener("DOMContentLoaded", function () {
     destination.name = "destination_id";
     destination.value = moveDestination.value;
     bulkForm.appendChild(destination);
-    bulkForm.action = "/items/move";
+    var sourceEvent = bulkForm.querySelector("input[name='source_event_id']");
+    if (sourceEvent) sourceEvent.remove();
+    if (moveForm && moveForm.dataset.eventWorkspace === "true") {
+      sourceEvent = document.createElement("input");
+      sourceEvent.type = "hidden";
+      sourceEvent.name = "source_event_id";
+      sourceEvent.value = moveForm.dataset.currentEventId || "";
+      bulkForm.appendChild(sourceEvent);
+    }
+    bulkForm.action = moveForm && moveForm.dataset.moveAction ? moveForm.dataset.moveAction : "/items/move";
     addWorkspaceReturnTarget(bulkForm);
     bulkForm.submit();
   }
   if (cancelMove) cancelMove.addEventListener("click", closeMoveModal);
+  if (moveDestinationTree) moveDestinationTree.addEventListener("click", function (event) {
+    selectMoveDestination(event.target.closest(".move-destination-option"));
+  });
   if (moveModal) moveModal.addEventListener("click", function (event) {
     if (event.target === moveModal) closeMoveModal();
   });

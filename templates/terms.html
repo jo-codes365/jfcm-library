@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% set legal_page = 'terms' %}
+{% block title %}Terms of Use | JFCM Library{% endblock %}
+{% block content %}
+<main class="legal-page">
+  <header class="legal-header">
+    <a class="brand" href="{{ url_for('index') }}">
+      <img src="{{ url_for('static', filename='images/JF.png') }}" alt="JFCM Pila" class="brand-logo">
+      JFCM Library
+    </a>
+    <a class="button secondary small" href="{{ url_for('index') }}">Back to Library</a>
+  </header>
+  <article class="legal-card">
+    <div class="legal-intro">
+      <p class="legal-kicker">JFCM Library</p>
+      <h1>Terms of Use</h1>
+      <p class="muted">Last updated September 18, 2026</p>
+      <p>These terms help keep JFCM Library safe and useful for church ministry, administration, and approved community activities.</p>
+    </div>
+
+    <section>
+      <h2>Acceptable use</h2>
+      <p>Use the Library only for lawful, authorized church or ministry purposes. Respect other users, confidentiality, copyright, and applicable church policies.</p>
+    </section>
+
+    <section>
+      <h2>Account responsibility</h2>
+      <p>Keep your sign-in details private, use accurate account information, and promptly report suspected unauthorized access. You are responsible for activity performed through your account and for choosing appropriate sharing settings.</p>
+    </section>
+
+    <section>
+      <h2>Prohibited content and activity</h2>
+      <p>Do not upload or share unlawful, abusive, hateful, sexually explicit, malicious, deceptive, privacy-invasive, or copyright-infringing material. Do not upload malware, attempt unauthorized access, disrupt the service, bypass security controls, or use storage for unrelated commercial or bulk-distribution purposes.</p>
+    </section>
+
+    <section>
+      <h2>Your files</h2>
+      <p>You keep ownership of files you upload. You give JFCM Pila permission to store, copy, process, preview, and deliver those files only as needed to operate the Library. You must have the right and permission to upload and share each file.</p>
+    </section>
+
+    <section>
+      <h2>Service availability</h2>
+      <p>We aim to keep the Library available and secure, but access may be interrupted for maintenance, provider outages, security work, or circumstances beyond our control. Features, storage limits, and access rules may change when reasonably necessary.</p>
+    </section>
+
+    <section>
+      <h2>Removal and account action</h2>
+      <p>Administrators may restrict sharing, remove files, suspend access, or close accounts when content violates these terms, creates security or legal risk, exceeds approved use, or is no longer needed. Users may delete their own files; items in Trash are scheduled for permanent deletion after 30 days.</p>
+    </section>
+
+    <section>
+      <h2>Limits of responsibility</h2>
+      <p>The Library is provided for church use on an as-available basis. To the extent allowed by law, JFCM Pila is not responsible for indirect loss, lost opportunities, or loss caused by user actions, public links, third-party outages, or events outside reasonable control. Nothing here excludes responsibility that cannot legally be limited.</p>
+    </section>
+
+    <section>
+      <h2>Questions</h2>
+      <p>Questions about these terms may be directed to the JFCM Pila church office or your JFCM Library administrator through the church's official communication channels.</p>
+    </section>
+  </article>
+  <footer class="legal-page-footer">{% include "_legal_links.html" %}</footer>
+</main>
+{% endblock %}

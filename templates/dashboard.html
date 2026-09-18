@@ -36,6 +36,7 @@
       {% else %}
       <a class="sidebar-link secondary" href="{{ url_for('login') }}"><i class="bi bi-box-arrow-in-right"></i> Sign In</a>
       {% endif %}
+      {% include "_legal_links.html" %}
       <!-- <a class="sidebar-link" href="{{ url_for('register') }}"><i class="bi bi-person-plus"></i> Sign Up</a> -->
     </div>
     {% else %}
@@ -83,6 +84,7 @@
         <strong>{{ readable_size(total_storage) }}</strong>
       </div>
       <a id="logout-link" class="sidebar-link trash" href="{{ url_for('logout') }}"><i class="bi bi-box-arrow-right"></i> Sign out</a>
+      {% include "_legal_links.html" %}
     </div>
     {% endif %}
   </aside>
@@ -334,16 +336,23 @@
         <div id="move-modal" class="modal rename-item-modal" hidden aria-modal="true" role="dialog" aria-labelledby="move-title">
           <section class="modal-card rename-item-card">
             <h2 id="move-title">Move items</h2>
-            <form id="move-form">
-              <select id="move-destination" name="destination_id" required>
-                <option value="root">{{ display_name(current_event.name) if current_event else 'My Files' }}</option>
-                {% for folder in move_folders %}
-                <option value="{{ folder.id }}">{{ display_name(folder.name) }}</option>
+            <form id="move-form" data-move-action="{{ url_for('move_event_items') if section == 'events' and event_id else url_for('move_items') }}" data-event-workspace="{{ 'true' if section == 'events' and event_id else 'false' }}" data-current-event-id="{{ event_id or '' }}">
+              <input id="move-destination" name="destination_id" type="hidden" value="">
+              <div id="move-destination-tree" class="move-destination-tree" role="tree" aria-label="Choose a destination">
+                {% for destination in move_destinations|default([]) %}
+                  {% if destination.kind == 'events' %}
+                  <div class="move-destination-group" role="presentation"><i class="bi bi-calendar-date" aria-hidden="true"></i><span>{{ destination.name }}</span></div>
+                  {% else %}
+                  <button class="move-destination-option" type="button" role="treeitem" aria-selected="false" data-destination-value="{{ destination.value }}" data-destination-kind="{{ destination.kind }}" data-event-id="{{ destination.event_id or '' }}" data-folder-id="{{ destination.folder_id or '' }}" data-ancestor-ids="{{ destination.ancestor_ids }}" style="--tree-depth: {{ destination.depth }}">
+                    <img src="{{ url_for('static', filename='images/' ~ destination.icon_filename) }}" alt="">
+                    <span>{{ display_name(destination.name) }}</span>
+                  </button>
+                  {% endif %}
                 {% endfor %}
-              </select>
+              </div>
               <div class="modal-actions">
                 <button id="cancel-move" class="button secondary" type="button">Cancel</button>
-                <button class="button primary" type="submit">Move</button>
+                <button id="confirm-move" class="button primary" type="submit" disabled>Move</button>
               </div>
             </form>
           </section>
@@ -507,7 +516,7 @@
                     {% set item_offline_url = url_for('offline_manifest', kind=item.kind, item_id=item.id) %}
                   {% endif %}
                   {% set item_copy_url = url_for('token_preview', share_token=item.share_token, _external=true) if item.kind == 'file' and item.share_token else url_for('public_event', share_token=current_event.share_token, folder=item.id, _external=true) if item.kind == 'folder' and current_event and current_event.share_token else url_for('public_folder', share_token=item.share_token, _external=true) if item.kind == 'folder' and item.share_token else url_for('public_event', share_token=item.share_token, _external=true) if item.kind == 'event' and item.share_token else '' %}
-                  <tr{% if item.kind == 'file' and not is_trash %} class="previewable-row" data-preview-url="{{ item_open_url }}"{% endif %} data-kind="{{ item.kind }}" data-item-id="{{ item.id }}" data-parent-id="{{ item.parent_id or '' }}" data-item-name="{{ item.name }}" data-item-display-name="{{ display_name(item.name) }}" data-item-type="{{ 'Folder' if item.kind == 'folder' else clean_file_type(item) }}" data-item-size="{{ display_item_size(item.kind, item.size if item.kind in ['folder', 'event'] else item.file_size) }}" data-item-location="{{ item.location }}" data-item-accessed="{{ format_datetime(item.accessed_at) if item.kind in ['file', 'folder'] and item.accessed_at else '—' }}" data-sort-size="{{ item.size if item.kind == 'folder' else item.file_size }}" data-item-modified="{{ format_datetime(item.date) }}" data-item-date-label="{{ 'Date deleted' if is_trash else 'Created or uploaded' }}" data-item-expiration="{{ trash_days_remaining(item.deleted_at) if is_trash and item.deleted_at else '' }}" data-open-url="{{ item_open_url }}" data-download-url="{{ item_download_url }}" data-copy-url="{{ item_copy_url }}"{% if item.kind == 'folder' and not is_trash %} data-folder-id="{{ item.id }}"{% endif %} data-file-type="{{ 'folder' if item.kind == 'folder' else file_type_key(item) }}" data-modified-date="{{ item.date.isoformat() if item.date else '' }}"{% if item.kind == 'event' %} data-item-icon="{{ item.event_type }}"{% endif %}>
+                  <tr{% if item.kind == 'file' and not is_trash %} class="previewable-row" data-preview-url="{{ item_open_url }}"{% endif %} data-kind="{{ item.kind }}" data-item-id="{{ item.id }}" data-parent-id="{{ item.parent_id or '' }}" data-current-destination="{% if item.parent_id %}folder:{{ item.parent_id }}{% elif section == 'events' and event_id %}event:{{ event_id }}{% else %}library{% endif %}" data-item-name="{{ item.name }}" data-item-display-name="{{ display_name(item.name) }}" data-item-type="{{ 'Folder' if item.kind == 'folder' else clean_file_type(item) }}" data-item-size="{{ display_item_size(item.kind, item.size if item.kind in ['folder', 'event'] else item.file_size) }}" data-item-location="{{ item.location }}" data-item-accessed="{{ format_datetime(item.accessed_at) if item.kind in ['file', 'folder'] and item.accessed_at else '—' }}" data-sort-size="{{ item.size if item.kind == 'folder' else item.file_size }}" data-item-modified="{{ format_datetime(item.date) }}" data-item-date-label="{{ 'Date deleted' if is_trash else 'Created or uploaded' }}" data-item-expiration="{{ trash_days_remaining(item.deleted_at) if is_trash and item.deleted_at else '' }}" data-open-url="{{ item_open_url }}" data-download-url="{{ item_download_url }}" data-copy-url="{{ item_copy_url }}"{% if item.kind == 'folder' and not is_trash %} data-folder-id="{{ item.id }}"{% endif %} data-file-type="{{ 'folder' if item.kind == 'folder' else file_type_key(item) }}" data-modified-date="{{ item.date.isoformat() if item.date else '' }}"{% if item.kind == 'event' %} data-item-icon="{{ item.event_type }}"{% endif %}>
                     {% if not is_public_workspace %}<td class="selection-cell"><input class="item-select" type="checkbox" name="items" value="{{ item.kind }}:{{ item.id }}" aria-label="Select {{ display_name(item.name) }}"></td>{% endif %}
                     <td class="file-name">
                       {% if section == 'events' and not current_event and not is_event_date_workspace and item.kind == 'event' %}
@@ -634,8 +643,8 @@
       <button id="offline-item" class="norms" type="button" data-offline-action="true"><i class="bi bi-cloud-arrow-down"></i> <span>Save Offline</span></button>
       <hr style="width: 100%; margin: 3px 0; background-color: #cbd2dc; size: 0.5px;">
       {% if not is_shared_workspace or workspace_can_edit %}
-      <button id="rename-item" class="norms" type="button"><i class="bi bi-pencil-square"></i> <span id="rename-item-label">Rename</span></button>
-      <button id="move-item" class="norms" type="button"><i class="bi bi-folder-symlink"></i> Move</button>
+      <button id="rename-item" class="norms" type="button"><i class="bi bi-pencil-square"></i><span id="rename-item-label">Rename</span><i id="edit-item-chevron" class="bi bi-chevron-right action-chevron" aria-hidden="true" hidden></i></button>
+      <button id="move-item" class="norms" type="button"><i class="bi bi-folder-symlink"></i><span>Move</span><i class="bi bi-chevron-right action-chevron" aria-hidden="true"></i></button>
       {% endif %}
       {% if not is_shared_workspace %}
       <button id="star-item" class="norms" type="button"><i class="bi bi-star"></i> Star</button>
@@ -664,7 +673,7 @@
       <button id="bulk-offline-action" class="norms" type="button" aria-label="Make selected items accessible offline" title="Make selected items accessible offline"><i class="bi bi-cloud-arrow-down" aria-hidden="true"></i> <span>Save Offline</span></button>
       <hr style="width: 100%; margin: 3px 0; background-color: #cbd2dc; size: 0.5px;">
       <button class="norms" type="button" data-action="/items/star" data-starred="true"><i class="bi bi-star"></i> Star</button>
-      <button class="norms" type="button" data-action="/items/move"><i class="bi bi-folder-symlink"></i> Move</button>
+      <button class="norms" type="button" data-action="/items/move"><i class="bi bi-folder-symlink"></i><span>Move</span><i class="bi bi-chevron-right action-chevron" aria-hidden="true"></i></button>
       <hr style="width: 100%; margin: 3px 0; background-color: #cbd2dc; size: 0.5px;">
       <button class="norms bulk-danger-action" type="button" data-action="/items/trash"><i class="bi bi-trash"></i> Move to Trash</button>
       {% else %}

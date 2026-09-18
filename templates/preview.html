@@ -323,7 +323,7 @@
 <div id="preview-move-modal" class="modal rename-item-modal" hidden aria-modal="true" role="dialog" aria-labelledby="preview-move-title">
   <section class="modal-card rename-item-card">
     <h2 id="preview-move-title">Move item</h2>
-    <form method="post" action="{{ url_for('move_items') }}">
+    <form method="post" action="{{ url_for('move_event_items') if file.event_id else url_for('move_items') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="return_to" value="{{ workspace_return_url }}">
       {% if share_context %}
@@ -331,17 +331,23 @@
       <input type="hidden" name="share_context_token" value="{{ share_context.token }}">
       {% endif %}
       <input type="hidden" name="items" value="file:{{ file.id }}">
-      <select id="preview-move-destination" name="destination_id" required>
-        <option value="root"{% if not file.folder_id %} hidden disabled{% endif %}>{{ 'Event' if file.event_id else 'Library' }}</option>
-        {% for folder in move_folders %}
-        {% if folder.id != file.folder_id %}
-        <option value="{{ folder.id }}">{{ display_name(folder.name) }}</option>
-        {% endif %}
+      {% if file.event_id %}<input type="hidden" name="source_event_id" value="{{ file.event_id }}">{% endif %}
+      <input id="preview-move-destination" name="destination_id" type="hidden" value="">
+      <div id="preview-move-destination-tree" class="move-destination-tree" role="tree" aria-label="Choose a destination" data-current-destination="{% if file.folder_id %}folder:{{ file.folder_id }}{% elif file.event_id %}event:{{ file.event_id }}{% else %}library{% endif %}" data-source-event-id="{{ file.event_id or '' }}">
+        {% for destination in move_destinations|default([]) %}
+          {% if destination.kind == 'events' %}
+          <div class="move-destination-group" role="presentation"><i class="bi bi-calendar-date" aria-hidden="true"></i><span>{{ destination.name }}</span></div>
+          {% else %}
+          <button class="move-destination-option" type="button" role="treeitem" aria-selected="false" data-destination-value="{{ destination.value }}" data-destination-kind="{{ destination.kind }}" data-event-id="{{ destination.event_id or '' }}" style="--tree-depth: {{ destination.depth }}">
+            <img src="{{ url_for('static', filename='images/' ~ destination.icon_filename) }}" alt="">
+            <span>{{ display_name(destination.name) }}</span>
+          </button>
+          {% endif %}
         {% endfor %}
-      </select>
+      </div>
       <div class="modal-actions">
         <button id="cancel-preview-move" class="button secondary" type="button">Cancel</button>
-        <button class="button primary" type="submit">Move</button>
+        <button id="confirm-preview-move" class="button primary" type="submit" disabled>Move</button>
       </div>
     </form>
   </section>

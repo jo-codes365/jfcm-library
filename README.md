@@ -94,9 +94,10 @@ UPLOAD_FOLDER=uploads
 MAX_FILE_SIZE_MB=50
 SESSION_COOKIE_SECURE=false
 FLASK_DEBUG=false
+PRIVACY_CONTACT_EMAIL=privacy@example.org
 ```
 
-Generate a long, unpredictable `SECRET_KEY`. Keep `.env` private; it is ignored by Git. Set `SESSION_COOKIE_SECURE=true` only when serving the app through HTTPS; leave it false for normal local HTTP use.
+Generate a long, unpredictable `SECRET_KEY`. Keep `.env` private; it is ignored by Git. Set `SESSION_COOKIE_SECURE=true` only when serving the app through HTTPS; leave it false for normal local HTTP use. Set `PRIVACY_CONTACT_EMAIL` to the church or Library administrator address that should appear in the Privacy Notice; when omitted, the page directs users to the JFCM Pila church office.
 
 ## Run
 

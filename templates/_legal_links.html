@@ -1,0 +1,5 @@
+<nav class="legal-links" aria-label="Legal information">
+  <a href="{{ url_for('privacy_notice') }}"{% if legal_page|default('') == 'privacy' %} aria-current="page"{% endif %}>Privacy Notice</a>
+  <span aria-hidden="true">&middot;</span>
+  <a href="{{ url_for('terms_of_use') }}"{% if legal_page|default('') == 'terms' %} aria-current="page"{% endif %}>Terms of Use</a>
+</nav>

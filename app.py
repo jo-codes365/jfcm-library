@@ -81,6 +81,7 @@ SMTP_USERNAME = os.getenv("SMTP_USERNAME", "")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 SMTP_FROM_EMAIL = os.getenv("SMTP_FROM_EMAIL", SMTP_USERNAME)
 SMTP_FROM_NAME = os.getenv("SMTP_FROM_NAME", "JFCM Pila")
+PRIVACY_CONTACT_EMAIL = os.getenv("PRIVACY_CONTACT_EMAIL", "").strip()
 
 
 def send_welcome_email(email, subject="Welcome to JFCM Pila"):
@@ -1573,6 +1574,71 @@ def event_type_label(event_type):
     return labels.get((event_type or "").strip().lower(), "Event")
 
 
+def move_destination_options(owner_id):
+    """Return an ordered, flattened destination tree for the Move modal."""
+    cursor = get_db().cursor(dictionary=True)
+    try:
+        cursor.execute(
+            "SELECT id, name, parent_id, event_id FROM folders "
+            "WHERE user_id = %s AND is_deleted = FALSE ORDER BY name",
+            (owner_id,),
+        )
+        folders = cursor.fetchall()
+        cursor.execute(
+            "SELECT id, name, event_type FROM events "
+            "WHERE user_id = %s AND is_deleted = FALSE ORDER BY event_date, name",
+            (owner_id,),
+        )
+        events = cursor.fetchall()
+    finally:
+        cursor.close()
+
+    children = {}
+    for folder in folders:
+        children.setdefault((folder.get("event_id"), folder.get("parent_id")), []).append(folder)
+
+    destinations = [{
+        "value": "library",
+        "kind": "library",
+        "name": "JFCM Library",
+        "depth": 0,
+        "folder_id": None,
+        "event_id": None,
+        "ancestor_ids": "",
+        "icon_filename": "Folder.png",
+    }]
+
+    def append_folders(event_id, parent_id, depth, ancestors):
+        for folder in children.get((event_id, parent_id), []):
+            destinations.append({
+                "value": f"folder:{folder['id']}",
+                "kind": "folder",
+                "name": folder["name"],
+                "depth": depth,
+                "folder_id": folder["id"],
+                "event_id": folder.get("event_id"),
+                "ancestor_ids": ",".join(str(folder_id) for folder_id in ancestors),
+                "icon_filename": "Folder.png",
+            })
+            append_folders(event_id, folder["id"], depth + 1, [*ancestors, folder["id"]])
+
+    append_folders(None, None, 1, [])
+    destinations.append({"value": "", "kind": "events", "name": "Events", "depth": 0})
+    for event in events:
+        destinations.append({
+            "value": f"event:{event['id']}",
+            "kind": "event",
+            "name": event["name"],
+            "depth": 1,
+            "folder_id": None,
+            "event_id": event["id"],
+            "ancestor_ids": "",
+            "icon_filename": event_icon_file(event.get("event_type")),
+        })
+        append_folders(event["id"], None, 2, [])
+    return destinations
+
+
 def trash_days_remaining(deleted_at):
     if not deleted_at:
         return ""
@@ -1645,6 +1711,16 @@ def index():
             touch_authenticated_session()
             purge_expired_trash(session["user_id"])
     return redirect(url_for("dashboard"))
+
+
+@app.get("/privacy")
+def privacy_notice():
+    return render_template("privacy.html", privacy_contact_email=PRIVACY_CONTACT_EMAIL)
+
+
+@app.get("/terms")
+def terms_of_use():
+    return render_template("terms.html")
 
 
 @app.route("/register", methods=["GET", "POST"])
@@ -1971,6 +2047,7 @@ def dashboard():
             date_workspace_events=date_workspace_events,
             is_trash=deleted,
             move_folders=move_folders,
+            move_destinations=move_destination_options(session["user_id"]),
             sidebar_events=sidebar_events,
             search_query=search_query,
             calendar_auto_open=request.args.get("calendar") == "open",
@@ -2789,6 +2866,7 @@ def preview(file_id):
         file=record,
         preview_kind=preview_kind(record),
         move_folders=move_folders,
+        move_destinations=move_destination_options(record["user_id"]) if record["can_edit"] else [],
         workspace_return_url=workspace_return_url(),
         file_location="Public Files" if is_public_workspace else file_location(record),
         workspace_can_edit=record["can_edit"],
@@ -2823,6 +2901,7 @@ def token_preview(share_token):
         file=record,
         preview_kind=preview_kind(record),
         move_folders=move_folders,
+        move_destinations=move_destination_options(record["user_id"]) if record["can_edit"] else [],
         workspace_return_url=workspace_return_url(),
         file_location="Public Files" if is_public_workspace else file_location(record),
         workspace_can_edit=record["can_edit"],
@@ -3179,22 +3258,40 @@ def star_items():
 @app.post("/items/move")
 @login_required
 def move_items():
+    """Move Library items using the existing Library move workflow."""
     share_context = request_share_context()
     raw_destination = request.form.get("destination_id")
-    destination_folder = None
-    if share_context:
-        if raw_destination in (None, "", "root"):
-            destination = None
-        elif not str(raw_destination).isdigit():
+    destination_event_id = None
+    if raw_destination in (None, "", "root", "library"):
+        destination = None
+    elif raw_destination and raw_destination.startswith("event:"):
+        raw_event_id = raw_destination.partition(":")[2]
+        if not raw_event_id.isdigit():
             abort(400)
-        else:
-            destination_folder = accessible_folder(int(raw_destination), require_owner=True, share_context=share_context)
-            if not destination_folder:
-                abort(404)
-            destination = destination_folder["id"]
+        destination_event = owned_event(int(raw_event_id))
+        if not destination_event:
+            abort(404)
+        destination = None
+        destination_event_id = destination_event["id"]
+    elif raw_destination and raw_destination.startswith("folder:"):
+        raw_folder_id = raw_destination.partition(":")[2]
+        if not raw_folder_id.isdigit():
+            abort(400)
+        destination_folder = accessible_folder(int(raw_folder_id), require_owner=True, share_context=share_context)
+        if not destination_folder:
+            abort(404)
+        destination = destination_folder["id"]
+        destination_event_id = destination_folder.get("event_id")
+    elif str(raw_destination).isdigit():
+        destination_folder = accessible_folder(int(raw_destination), require_owner=True, share_context=share_context)
+        if not destination_folder:
+            abort(404)
+        destination = destination_folder["id"]
+        destination_event_id = destination_folder.get("event_id")
     else:
-        destination = valid_destination(raw_destination)
-        destination_folder = owned_folder(destination) if destination else None
+        abort(400)
+
+    operations = []
     for item in request.form.getlist("items"):
         kind, _, raw_id = item.partition(":")
         if kind not in {"file", "folder"} or not raw_id.isdigit():
@@ -3202,26 +3299,153 @@ def move_items():
         item_id = int(raw_id)
         if kind == "folder":
             folder = accessible_folder(item_id, require_owner=True, share_context=share_context)
-            if not folder or destination == item_id or (destination and destination in folder_descendants(item_id, owner_id=folder["user_id"])):
+            if not folder:
+                abort(404)
+            if folder.get("event_id") is not None:
                 abort(400)
-            if destination_folder and destination_folder.get("event_id") != folder.get("event_id"):
+            descendants = folder_descendants(item_id, owner_id=folder["user_id"])
+            if destination == item_id or (destination and destination in descendants):
                 abort(400)
-            query = "UPDATE folders SET parent_id = %s WHERE id = %s AND user_id = %s AND is_deleted = FALSE"
+            if folder.get("parent_id") == destination and destination_event_id is None:
+                abort(400)
+            operations.append((kind, folder, [item_id, *descendants]))
         else:
             file_record = accessible_file(item_id, require_owner=True, share_context=share_context)
             if not file_record:
                 abort(404)
-            if destination_folder and destination_folder.get("event_id") != file_record.get("event_id"):
+            if file_record.get("event_id") is not None:
                 abort(400)
-            query = "UPDATE files SET folder_id = %s WHERE id = %s AND user_id = %s AND is_deleted = FALSE"
-        cursor = get_db().cursor()
-        try:
-            owner_id = folder["user_id"] if kind == "folder" else file_record["user_id"]
-            cursor.execute(query, (destination, item_id, owner_id))
-            get_db().commit()
-        finally:
-            cursor.close()
-    flash("Items moved to the selected folder.", "success")
+            if file_record.get("folder_id") == destination and destination_event_id is None:
+                abort(400)
+            operations.append((kind, file_record, None))
+
+    cursor = get_db().cursor()
+    try:
+        for kind, record, subtree_ids in operations:
+            if kind == "file":
+                cursor.execute(
+                    "UPDATE files SET folder_id = %s, event_id = %s "
+                    "WHERE id = %s AND user_id = %s AND is_deleted = FALSE",
+                    (destination, destination_event_id, record["id"], record["user_id"]),
+                )
+            else:
+                placeholders = ",".join(["%s"] * len(subtree_ids))
+                cursor.execute(
+                    "UPDATE folders SET parent_id = %s, event_id = %s "
+                    "WHERE id = %s AND user_id = %s AND is_deleted = FALSE",
+                    (destination, destination_event_id, record["id"], record["user_id"]),
+                )
+                cursor.execute(
+                    f"UPDATE folders SET event_id = %s WHERE user_id = %s AND is_deleted = FALSE AND id IN ({placeholders})",
+                    (destination_event_id, record["user_id"], *subtree_ids),
+                )
+                cursor.execute(
+                    f"UPDATE files SET event_id = %s WHERE user_id = %s AND is_deleted = FALSE AND folder_id IN ({placeholders})",
+                    (destination_event_id, record["user_id"], *subtree_ids),
+                )
+        get_db().commit()
+    except MySQLError:
+        get_db().rollback()
+        raise
+    finally:
+        cursor.close()
+    flash("Items moved to the selected destination.", "success")
+    return redirect_to_workspace()
+
+
+@app.post("/events/items/move")
+@login_required
+def move_event_items():
+    """Move Event files/folders only to a different Event workspace."""
+    share_context = request_share_context()
+    raw_source_event_id = request.form.get("source_event_id", "")
+    if not raw_source_event_id.isdigit():
+        abort(400)
+    source_event = owned_event(int(raw_source_event_id))
+    if not source_event:
+        abort(404)
+    source_event_id = source_event["id"]
+    raw_destination = request.form.get("destination_id", "")
+    destination_folder = None
+    if raw_destination.startswith("event:"):
+        raw_event_id = raw_destination.partition(":")[2]
+        if not raw_event_id.isdigit():
+            abort(400)
+        destination_event = owned_event(int(raw_event_id))
+        if not destination_event:
+            abort(404)
+        destination = None
+        destination_event_id = destination_event["id"]
+    elif raw_destination.startswith("folder:"):
+        raw_folder_id = raw_destination.partition(":")[2]
+        if not raw_folder_id.isdigit():
+            abort(400)
+        destination_folder = accessible_folder(int(raw_folder_id), require_owner=True, share_context=share_context)
+        if not destination_folder:
+            abort(404)
+        destination_event_id = destination_folder.get("event_id")
+        if destination_event_id is None or not owned_event(destination_event_id):
+            abort(400)
+        destination = destination_folder["id"]
+    else:
+        # Library roots and Library folders are never valid Event destinations.
+        abort(400)
+
+    operations = []
+    for item in request.form.getlist("items"):
+        kind, _, raw_id = item.partition(":")
+        if kind not in {"file", "folder"} or not raw_id.isdigit():
+            abort(400)
+        item_id = int(raw_id)
+        if kind == "folder":
+            record = accessible_folder(item_id, require_owner=True, share_context=share_context)
+            if not record:
+                abort(404)
+            if record.get("event_id") != source_event_id or source_event_id == destination_event_id:
+                abort(400)
+            descendants = folder_descendants(item_id, owner_id=record["user_id"])
+            if destination == item_id or (destination and destination in descendants):
+                abort(400)
+            operations.append((kind, record, [item_id, *descendants]))
+        else:
+            record = accessible_file(item_id, require_owner=True, share_context=share_context)
+            if not record:
+                abort(404)
+            if record.get("event_id") != source_event_id or source_event_id == destination_event_id:
+                abort(400)
+            operations.append((kind, record, None))
+
+    cursor = get_db().cursor()
+    try:
+        for kind, record, subtree_ids in operations:
+            if kind == "file":
+                cursor.execute(
+                    "UPDATE files SET folder_id = %s, event_id = %s "
+                    "WHERE id = %s AND user_id = %s AND is_deleted = FALSE",
+                    (destination, destination_event_id, record["id"], record["user_id"]),
+                )
+                continue
+            placeholders = ",".join(["%s"] * len(subtree_ids))
+            cursor.execute(
+                "UPDATE folders SET parent_id = %s, event_id = %s "
+                "WHERE id = %s AND user_id = %s AND is_deleted = FALSE",
+                (destination, destination_event_id, record["id"], record["user_id"]),
+            )
+            cursor.execute(
+                f"UPDATE folders SET event_id = %s WHERE user_id = %s AND is_deleted = FALSE AND id IN ({placeholders})",
+                (destination_event_id, record["user_id"], *subtree_ids),
+            )
+            cursor.execute(
+                f"UPDATE files SET event_id = %s WHERE user_id = %s AND is_deleted = FALSE AND folder_id IN ({placeholders})",
+                (destination_event_id, record["user_id"], *subtree_ids),
+            )
+        get_db().commit()
+    except MySQLError:
+        get_db().rollback()
+        raise
+    finally:
+        cursor.close()
+    flash("Event items moved to the selected Event.", "success")
     return redirect_to_workspace()
 
 
@@ -3513,6 +3737,7 @@ def public_folder(share_token):
         current_event=None,
         is_trash=False,
         move_folders=[] if "user_id" not in session else move_folders,
+        move_destinations=move_destination_options(session["user_id"]) if "user_id" in session else [],
         sidebar_events=public_sidebar_events(),
         search_query="",
         is_global_search=False,
@@ -3657,6 +3882,7 @@ def render_public_event_workspace(event_id, share_context):
         date_workspace_events=[],
         is_trash=False,
         move_folders=[] if "user_id" not in session else move_folders,
+        move_destinations=move_destination_options(session["user_id"]) if "user_id" in session else [],
         sidebar_events=public_sidebar_events(),
         search_query="",
         calendar_auto_open=False,

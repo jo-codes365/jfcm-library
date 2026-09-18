@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% set legal_page = 'privacy' %}
+{% block title %}Privacy Notice | JFCM Library{% endblock %}
+{% block content %}
+<main class="legal-page">
+  <header class="legal-header">
+    <a class="brand" href="{{ url_for('index') }}">
+      <img src="{{ url_for('static', filename='images/JF.png') }}" alt="JFCM Pila" class="brand-logo">
+      JFCM Library
+    </a>
+    <a class="button secondary small" href="{{ url_for('index') }}">Back to Library</a>
+  </header>
+  <article class="legal-card">
+    <div class="legal-intro">
+      <p class="legal-kicker">JFCM Library</p>
+      <h1>Privacy Notice</h1>
+      <p class="muted">Last updated September 18, 2026</p>
+      <p>This notice explains how JFCM Library handles personal information when church members and authorized users store, organize, and share ministry files.</p>
+    </div>
+
+    <section>
+      <h2>Information we collect</h2>
+      <ul>
+        <li><strong>Account information:</strong> email address, username, password hash, and information needed to keep you signed in securely.</li>
+        <li><strong>File and Event information:</strong> filenames, file type and size, folder and Event names, upload dates, sharing settings, and storage location.</li>
+        <li><strong>Activity information:</strong> creation, upload, access, update, deletion, and restoration timestamps. Hosting logs may also contain request, device, and network information used for security and troubleshooting.</li>
+      </ul>
+      <p>File contents may contain personal information chosen by the person who uploads them. Please upload only material that is appropriate for church use.</p>
+    </section>
+
+    <section>
+      <h2>Why we use this information</h2>
+      <p>We use the information to provide accounts, store and organize files, support Events and sharing, protect the service, prevent misuse, resolve technical problems, and meet applicable legal or church-administration requirements.</p>
+    </section>
+
+    <section>
+      <h2>Storage, sharing, and service providers</h2>
+      <p>JFCM Library may use Railway for application and database hosting and Cloudflare R2 for file or object storage. These providers process data as needed to operate their services and apply their own security and privacy terms. Files shared through a public link can be accessed by anyone who receives that link, so users should share links carefully.</p>
+    </section>
+
+    <section>
+      <h2>How long we keep information</h2>
+      <p>Active account information, file metadata, and access records are generally kept while the account or related item remains in use. Items moved to Trash are scheduled for permanent deletion after 30 days. Some limited copies may remain temporarily in backups, caches, or provider logs before routine deletion or expiry.</p>
+    </section>
+
+    <section>
+      <h2>Your privacy rights</h2>
+      <p>You may ask to be informed about your data, access it, correct inaccurate information, object to or limit certain processing, request deletion or blocking where appropriate, obtain portable data where available, or raise a privacy concern. Some requests may be limited when retention is required for security, legal, or legitimate church-administration needs.</p>
+    </section>
+
+    <section>
+      <h2>Contact</h2>
+      {% if privacy_contact_email %}
+      <p>For privacy questions or requests, contact the JFCM Pila administrator at <a href="mailto:{{ privacy_contact_email }}">{{ privacy_contact_email }}</a>.</p>
+      {% else %}
+      <p>For privacy questions or requests, contact the JFCM Pila church office or your JFCM Library administrator through the church's official communication channels.</p>
+      {% endif %}
+    </section>
+  </article>
+  <footer class="legal-page-footer">{% include "_legal_links.html" %}</footer>
+</main>
+{% endblock %}
