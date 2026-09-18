@@ -197,7 +197,7 @@
                 {% endif %}
               </h1>
               {% if current_event and not current_folder %}
-              <span class="event-workspace-created"><i class="bi bi-calendar3" aria-hidden="true"></i> {{ format_datetime(current_event.created_at) }}</span>
+              <span class="event-workspace-created">{{ format_datetime(current_event.created_at) }}</span>
               {% endif %}
               {% if not current_folder and section != 'events' %}
               <div class="vr"> </div>

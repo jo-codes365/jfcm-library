@@ -222,6 +222,61 @@ h2 {
   margin: 0;
   padding-left: 22px;
 }
+.legal-accordion {
+  margin-top: 4px;
+  border-bottom: 1px solid #e5e7eb;
+}
+.legal-card .legal-accordion-item {
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid #e5e7eb;
+}
+.legal-card .legal-accordion-item + .legal-accordion-item {
+  margin-top: 0;
+}
+.legal-accordion-item h2 {
+  margin: 0;
+}
+.legal-accordion-trigger {
+  display: flex;
+  width: 100%;
+  min-height: 56px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px 4px;
+  border: 0;
+  color: #173f2a;
+  background: transparent;
+  font-family: Satoshi-Bold;
+  font-size: 1.05rem;
+  text-align: left;
+  cursor: pointer;
+  transition: color .15s ease, background-color .15s ease;
+}
+.legal-accordion-trigger:hover,
+.legal-accordion-trigger[aria-expanded="true"] {
+  color: var(--primary-dark);
+  background: #f5faf6;
+}
+.legal-accordion-trigger:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+.legal-accordion-trigger i {
+  flex: 0 0 auto;
+  font-size: .8rem;
+  transition: transform .18s ease;
+}
+.legal-accordion-trigger[aria-expanded="true"] i {
+  transform: rotate(90deg);
+}
+.legal-accordion-panel {
+  padding: 2px 20px 20px 4px;
+}
+.legal-accordion-panel[hidden] {
+  display: none;
+}
 .legal-card a {
   color: var(--primary-dark);
   text-decoration: underline;
@@ -239,6 +294,17 @@ h2 {
   }
   .legal-card {
     border-radius: 22px;
+  }
+}
+@media (max-width: 480px) {
+  .legal-accordion-trigger {
+    min-height: 52px;
+    gap: 12px;
+    padding-block: 12px;
+    font-size: .96rem;
+  }
+  .legal-accordion-panel {
+    padding: 2px 8px 18px 2px;
   }
 }
 
@@ -2631,7 +2697,6 @@ table tbody tr:nth-child(even) {
   margin-left: 2px;
   color: #6b7280;
   font-size: .82rem;
-  font-weight: 600;
   white-space: nowrap;
 }
 .workspace-event-title {

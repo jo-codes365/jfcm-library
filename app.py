@@ -1671,10 +1671,10 @@ def display_name(name):
 
 
 def format_datetime(dt):
-    """Format datetime to 'Aug 17, 2026 12:21pm' format."""
+    """Format datetime to 'Aug 17, 2026 12:21 pm' format."""
     if not dt:
         return ""
-    formatted = dt.strftime('%b %d, %Y %I:%M%p')
+    formatted = dt.strftime('%b %d, %Y %I:%M %p')
     formatted = formatted.replace(' 0', ' ', 1)
     return formatted.replace('AM', 'am').replace('PM', 'pm')
 

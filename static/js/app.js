@@ -77,6 +77,24 @@ document.addEventListener("DOMContentLoaded", function () {
     mobileSidebarQuery.addEventListener("change", function () { setSidebarOpen(false); });
   }
 
+  document.querySelectorAll("[data-legal-accordion]").forEach(function (accordion) {
+    var triggers = Array.from(accordion.querySelectorAll(".legal-accordion-trigger"));
+    function setLegalSectionOpen(trigger, isOpen) {
+      var panel = document.getElementById(trigger.getAttribute("aria-controls"));
+      trigger.setAttribute("aria-expanded", String(isOpen));
+      if (panel) panel.hidden = !isOpen;
+    }
+    triggers.forEach(function (trigger) {
+      setLegalSectionOpen(trigger, false);
+      trigger.addEventListener("click", function () {
+        var shouldOpen = trigger.getAttribute("aria-expanded") !== "true";
+        triggers.forEach(function (otherTrigger) {
+          setLegalSectionOpen(otherTrigger, shouldOpen && otherTrigger === trigger);
+        });
+      });
+    });
+  });
+
   document.querySelectorAll("[data-password-toggle]").forEach(function (toggle) {
     var target = document.getElementById(toggle.dataset.passwordToggle);
     var icon = toggle.querySelector("i");

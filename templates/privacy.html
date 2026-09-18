@@ -12,50 +12,56 @@
   </header>
   <article class="legal-card">
     <div class="legal-intro">
-      <p class="legal-kicker">JFCM Library</p>
+      <!-- <p class="legal-kicker">JFCM Library</p> -->
       <h1>Privacy Notice</h1>
       <p class="muted">Last updated September 18, 2026</p>
       <p>This notice explains how JFCM Library handles personal information when church members and authorized users store, organize, and share ministry files.</p>
     </div>
 
-    <section>
-      <h2>Information we collect</h2>
-      <ul>
-        <li><strong>Account information:</strong> email address, username, password hash, and information needed to keep you signed in securely.</li>
-        <li><strong>File and Event information:</strong> filenames, file type and size, folder and Event names, upload dates, sharing settings, and storage location.</li>
-        <li><strong>Activity information:</strong> creation, upload, access, update, deletion, and restoration timestamps. Hosting logs may also contain request, device, and network information used for security and troubleshooting.</li>
-      </ul>
-      <p>File contents may contain personal information chosen by the person who uploads them. Please upload only material that is appropriate for church use.</p>
-    </section>
+    <div class="legal-accordion" data-legal-accordion>
+      <section class="legal-accordion-item">
+        <h2><button id="privacy-trigger-information" class="legal-accordion-trigger" type="button" aria-expanded="false" aria-controls="privacy-panel-information"><span>Information we collect</span><i class="bi bi-caret-right-fill" aria-hidden="true"></i></button></h2>
+        <div id="privacy-panel-information" class="legal-accordion-panel" role="region" aria-labelledby="privacy-trigger-information" hidden>
+          <ul>
+            <li><strong>Account information:</strong> email address, username, password hash, and information needed to keep you signed in securely.</li>
+            <li><strong>File and Event information:</strong> filenames, file type and size, folder and Event names, upload dates, sharing settings, and storage location.</li>
+            <li><strong>Activity information:</strong> creation, upload, access, update, deletion, and restoration timestamps. Hosting logs may also contain request, device, and network information used for security and troubleshooting.</li>
+          </ul>
+          <p>File contents may contain personal information chosen by the person who uploads them. Please upload only material that is appropriate for church use.</p>
+        </div>
+      </section>
 
-    <section>
-      <h2>Why we use this information</h2>
-      <p>We use the information to provide accounts, store and organize files, support Events and sharing, protect the service, prevent misuse, resolve technical problems, and meet applicable legal or church-administration requirements.</p>
-    </section>
+      <section class="legal-accordion-item">
+        <h2><button id="privacy-trigger-purpose" class="legal-accordion-trigger" type="button" aria-expanded="false" aria-controls="privacy-panel-purpose"><span>Why we use this information</span><i class="bi bi-caret-right-fill" aria-hidden="true"></i></button></h2>
+        <div id="privacy-panel-purpose" class="legal-accordion-panel" role="region" aria-labelledby="privacy-trigger-purpose" hidden><p>We use the information to provide accounts, store and organize files, support Events and sharing, protect the service, prevent misuse, resolve technical problems, and meet applicable legal or church-administration requirements.</p></div>
+      </section>
 
-    <section>
-      <h2>Storage, sharing, and service providers</h2>
-      <p>JFCM Library may use Railway for application and database hosting and Cloudflare R2 for file or object storage. These providers process data as needed to operate their services and apply their own security and privacy terms. Files shared through a public link can be accessed by anyone who receives that link, so users should share links carefully.</p>
-    </section>
+      <section class="legal-accordion-item">
+        <h2><button id="privacy-trigger-storage" class="legal-accordion-trigger" type="button" aria-expanded="false" aria-controls="privacy-panel-storage"><span>Storage, sharing, and service providers</span><i class="bi bi-caret-right-fill" aria-hidden="true"></i></button></h2>
+        <div id="privacy-panel-storage" class="legal-accordion-panel" role="region" aria-labelledby="privacy-trigger-storage" hidden><p>JFCM Library may use Railway for application and database hosting and Cloudflare R2 for file or object storage. These providers process data as needed to operate their services and apply their own security and privacy terms. Files shared through a public link can be accessed by anyone who receives that link, so users should share links carefully.</p></div>
+      </section>
 
-    <section>
-      <h2>How long we keep information</h2>
-      <p>Active account information, file metadata, and access records are generally kept while the account or related item remains in use. Items moved to Trash are scheduled for permanent deletion after 30 days. Some limited copies may remain temporarily in backups, caches, or provider logs before routine deletion or expiry.</p>
-    </section>
+      <section class="legal-accordion-item">
+        <h2><button id="privacy-trigger-retention" class="legal-accordion-trigger" type="button" aria-expanded="false" aria-controls="privacy-panel-retention"><span>How long we keep information</span><i class="bi bi-caret-right-fill" aria-hidden="true"></i></button></h2>
+        <div id="privacy-panel-retention" class="legal-accordion-panel" role="region" aria-labelledby="privacy-trigger-retention" hidden><p>Active account information, file metadata, and access records are generally kept while the account or related item remains in use. Items moved to Trash are scheduled for permanent deletion after 30 days. Some limited copies may remain temporarily in backups, caches, or provider logs before routine deletion or expiry.</p></div>
+      </section>
 
-    <section>
-      <h2>Your privacy rights</h2>
-      <p>You may ask to be informed about your data, access it, correct inaccurate information, object to or limit certain processing, request deletion or blocking where appropriate, obtain portable data where available, or raise a privacy concern. Some requests may be limited when retention is required for security, legal, or legitimate church-administration needs.</p>
-    </section>
+      <section class="legal-accordion-item">
+        <h2><button id="privacy-trigger-rights" class="legal-accordion-trigger" type="button" aria-expanded="false" aria-controls="privacy-panel-rights"><span>Your privacy rights</span><i class="bi bi-caret-right-fill" aria-hidden="true"></i></button></h2>
+        <div id="privacy-panel-rights" class="legal-accordion-panel" role="region" aria-labelledby="privacy-trigger-rights" hidden><p>You may ask to be informed about your data, access it, correct inaccurate information, object to or limit certain processing, request deletion or blocking where appropriate, obtain portable data where available, or raise a privacy concern. Some requests may be limited when retention is required for security, legal, or legitimate church-administration needs.</p></div>
+      </section>
 
-    <section>
-      <h2>Contact</h2>
-      {% if privacy_contact_email %}
-      <p>For privacy questions or requests, contact the JFCM Pila administrator at <a href="mailto:{{ privacy_contact_email }}">{{ privacy_contact_email }}</a>.</p>
-      {% else %}
-      <p>For privacy questions or requests, contact the JFCM Pila church office or your JFCM Library administrator through the church's official communication channels.</p>
-      {% endif %}
-    </section>
+      <section class="legal-accordion-item">
+        <h2><button id="privacy-trigger-contact" class="legal-accordion-trigger" type="button" aria-expanded="false" aria-controls="privacy-panel-contact"><span>Contact</span><i class="bi bi-caret-right-fill" aria-hidden="true"></i></button></h2>
+        <div id="privacy-panel-contact" class="legal-accordion-panel" role="region" aria-labelledby="privacy-trigger-contact" hidden>
+          {% if privacy_contact_email %}
+          <p>For privacy questions or requests, contact the JFCM Pila administrator at <a href="mailto:{{ privacy_contact_email }}">{{ privacy_contact_email }}</a>.</p>
+          {% else %}
+          <p>For privacy questions or requests, contact the JFCM Pila church office or your JFCM Library administrator through the church's official communication channels.</p>
+          {% endif %}
+        </div>
+      </section>
+    </div>
   </article>
   <footer class="legal-page-footer">{% include "_legal_links.html" %}</footer>
 </main>
