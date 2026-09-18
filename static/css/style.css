@@ -2035,7 +2035,7 @@ table tbody tr:nth-child(even) {
   padding: 7px 20px 7px 40px;
   min-width: 0;
   overflow: hidden;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   white-space: nowrap;
 }
 .sidebar-event-icon {
