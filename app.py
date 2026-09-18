@@ -663,6 +663,22 @@ def folder_sizes(cursor, folder_ids, include_deleted=False, owner_id=None):
     return {row["root_id"]: row["total_size"] or 0 for row in cursor.fetchall()}
 
 
+def event_sizes(cursor, event_ids, include_deleted=False, owner_id=None):
+    """Return actual file-size totals for Events, including every nested folder."""
+    if not event_ids:
+        return {}
+    placeholders = ",".join(["%s"] * len(event_ids))
+    owner_condition = " AND user_id = %s" if owner_id is not None else ""
+    values = (include_deleted, *event_ids, owner_id) if owner_id is not None else (include_deleted, *event_ids)
+    cursor.execute(
+        "SELECT event_id, COALESCE(SUM(file_size), 0) AS total_size "
+        f"FROM files WHERE is_deleted = %s AND event_id IN ({placeholders}){owner_condition} "
+        "GROUP BY event_id",
+        values,
+    )
+    return {row["event_id"]: row["total_size"] or 0 for row in cursor.fetchall()}
+
+
 def folder_paths(folders):
     """Build display paths for a user's folder tree without cross-user lookups."""
     folders_by_id = {folder["id"]: folder for folder in folders}
@@ -1977,6 +1993,14 @@ def dashboard():
         sizes = folder_sizes(cursor, [folder["id"] for folder in folders], include_deleted=deleted)
         for folder in folders:
             folder["size"] = sizes.get(folder["id"], 0)
+        event_size_totals = event_sizes(
+            cursor,
+            [event["id"] for event in events],
+            include_deleted=deleted,
+            owner_id=session["user_id"],
+        )
+        for event in events:
+            event["size"] = event_size_totals.get(event["id"], 0)
         if not search_query and not (section == "events" and event_id is None) and not is_event_date_workspace:
             file_where = where.replace("parent_id", "folder_id")
             file_date = "deleted_at, deleted_at AS uploaded_at" if deleted else "COALESCE(accessed_at, uploaded_at) AS uploaded_at" if section == "recent" else "uploaded_at"
@@ -2286,6 +2310,9 @@ def public_events():
             "ORDER BY event_date DESC, name"
         )
         events = cursor.fetchall()
+        event_size_totals = event_sizes(cursor, [event["id"] for event in events])
+        for event in events:
+            event["size"] = event_size_totals.get(event["id"], 0)
     except MySQLError:
         app.logger.exception("Public Events workspace database error")
         abort(500)
@@ -2297,7 +2324,7 @@ def public_events():
             "kind": "event",
             "name": item["name"],
             "parent_id": None,
-            "size": 0,
+            "size": item["size"],
             "file_size": 0,
             "mime_type": "Event",
             "location": "Events",
