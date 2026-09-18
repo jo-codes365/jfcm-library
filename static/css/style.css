@@ -2388,6 +2388,9 @@ table tbody tr:nth-child(even) {
     flex-direction: column;
     align-items: stretch;
   }
+  .events-calendar-nav {
+    margin-bottom: 6px;
+  }
   .events-calendar-nav,
   .date-workspace-event-actions {
     width: 100%;
