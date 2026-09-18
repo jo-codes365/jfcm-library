@@ -1503,6 +1503,8 @@ EVENT_TYPE_OPTIONS = (
     ("fellowship", "Fellowship", "Fellowship.png"),
     ("water", "Water", "Water.png"),
     ("supper", "Supper", "Supper.png"),
+    ("camp", "Camp", "Camp.png"),
+    ("conference", "Conference", "Conference.png"),
 )
 EVENT_TYPE_FILE_MAP = {key: filename for key, _label, filename in EVENT_TYPE_OPTIONS}
 
@@ -1565,6 +1567,8 @@ def event_type_label(event_type):
         "fellowship": "Fellowship",
         "water": "Water Baptism",
         "supper": "Lord's Supper",
+        "camp": "Camp",
+        "conference": "Conference",
     }
     return labels.get((event_type or "").strip().lower(), "Event")
 
@@ -2119,13 +2123,26 @@ def search_suggestions():
                     "url": url_for("dashboard", section="trash") if deleted else url_for("dashboard", section="events", event=event_id, folder=item["id"]) if section == "events" else url_for("dashboard", folder=item["id"]),
                 })
             for item in files:
+                if deleted:
+                    item_url = url_for("dashboard", section="trash")
+                else:
+                    parent_workspace_url = (
+                        url_for("dashboard", section="events", event=event_id, folder=item["folder_id"])
+                        if section == "events" and item["folder_id"] is not None
+                        else url_for("dashboard", section="events", event=event_id)
+                        if section == "events"
+                        else url_for("dashboard", folder=item["folder_id"])
+                        if item["folder_id"] is not None
+                        else url_for("dashboard")
+                    )
+                    item_url = url_for("preview", file_id=item["id"], return_to=parent_workspace_url)
                 matches.append({
                     "kind": "file",
                     "name": display_name(item["original_filename"]),
                     "type": clean_file_type(item),
                     "location": paths.get(item["folder_id"], base_location),
                     "icon_url": url_for("static", filename=f"images/{file_type_icon(item)}"),
-                    "url": url_for("dashboard", section="trash") if deleted else url_for("preview", file_id=item["id"]),
+                    "url": item_url,
                 })
             if section == "trash" and len(matches) <= 5:
                 cursor.execute(

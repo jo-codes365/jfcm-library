@@ -1791,6 +1791,12 @@ table tbody tr:nth-child(even) {
   padding: 7px 20px 7px 40px;
   font-size: 0.8rem;
 }
+.sidebar-event-icon {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  flex: 0 0 auto;
+}
 .trash:hover {
   background: #ffe6e6;
 }
@@ -2288,7 +2294,7 @@ table tbody tr:nth-child(even) {
 }
 .event-icon-options {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 10px;
 }
 .event-icon-option {

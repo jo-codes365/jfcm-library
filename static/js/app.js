@@ -443,7 +443,10 @@ document.addEventListener("DOMContentLoaded", function () {
   function currentWorkspaceUrl() {
     var workspaceUrl = new URL(window.location.href);
     ["search", "type", "date", "sort", "direction"].forEach(function (key) { workspaceUrl.searchParams.delete(key); });
-    if (typeof searchInput !== "undefined" && searchInput && searchInput.value) workspaceUrl.searchParams.set("search", searchInput.value);
+    // The text in the global search box is only a suggestion query. Keep the
+    // currently loaded workspace URL unchanged until the user chooses a result
+    // (or explicitly follows the Show All link).
+    if (typeof loadedSearchQuery !== "undefined" && loadedSearchQuery) workspaceUrl.searchParams.set("search", loadedSearchQuery);
     if (typeof filterState !== "undefined" && filterState.type !== "all") workspaceUrl.searchParams.set("type", filterState.type);
     if (typeof filterState !== "undefined" && filterState.date !== "all") workspaceUrl.searchParams.set("date", filterState.date);
     if (typeof activeSortField !== "undefined" && activeSortField !== "date") workspaceUrl.searchParams.set("sort", activeSortField);
@@ -941,8 +944,6 @@ document.addEventListener("DOMContentLoaded", function () {
   var sortOptions = sortMenu ? Array.from(sortMenu.querySelectorAll("button[data-sort-field]")) : [];
   var workspaceState = new URLSearchParams(window.location.search);
   var loadedSearchQuery = workspaceState.get("search") || "";
-  var searchRequestTimer = null;
-  var searchRequestController = null;
   var suggestionRequestTimer = null;
   var suggestionRequestController = null;
   var activeSortField = ["date", "name", "size"].includes(workspaceState.get("sort")) ? workspaceState.get("sort") : "date";
@@ -1758,7 +1759,10 @@ document.addEventListener("DOMContentLoaded", function () {
     return modifiedDate >= cutoff;
   }
   function applyFileFilters() {
-    var term = searchInput ? searchInput.value.toLowerCase().trim() : "";
+    // A draft global-search query must not filter the workspace under it.
+    // loadedSearchQuery represents only a search that was explicitly opened
+    // through Show All and is already reflected in the rendered workspace.
+    var term = loadedSearchQuery.toLowerCase().trim();
     var shown = 0;
     fileRows.forEach(function (row) {
       var matchesSearch = row.textContent.toLowerCase().indexOf(term) !== -1;
@@ -1843,40 +1847,12 @@ document.addEventListener("DOMContentLoaded", function () {
     });
     return workspaceRefreshPromise;
   }
-  function reloadGlobalSearch() {
-    if (!searchInput || searchInput.value.trim() === loadedSearchQuery) return;
-    var destination = currentWorkspaceUrl();
-    var requestedSearchQuery = destination.searchParams.get("search") || "";
-    if (searchRequestController) searchRequestController.abort();
-    searchRequestController = new AbortController();
-    var loadingGeneration = showWorkspaceSkeleton();
-    fetch(destination.toString(), {
-      headers: { "X-Requested-With": "XMLHttpRequest" },
-      signal: searchRequestController.signal
-    }).then(function (response) {
-      if (!response.ok) throw new Error("Search request failed");
-      return response.text();
-    }).then(function (html) {
-      if (searchInput.value !== requestedSearchQuery) return;
-      applyWorkspaceResultsHtml(html);
-      loadedSearchQuery = requestedSearchQuery;
-      window.history.replaceState(null, "", destination.toString());
-    }).catch(function (error) {
-      if (error.name !== "AbortError") {
-        hideWorkspaceSkeleton(loadingGeneration);
-        showToast("Search results could not be refreshed.", "error");
-      }
-    });
-  }
   if (searchInput) {
     searchInput.addEventListener("input", function () {
       updateGlobalSearchClear();
-      applyFileFilters();
       if (suggestionRequestTimer) window.clearTimeout(suggestionRequestTimer);
       if (!searchInput.value.trim()) hideSearchSuggestions();
       else suggestionRequestTimer = window.setTimeout(loadSearchSuggestions, 140);
-      if (searchRequestTimer) window.clearTimeout(searchRequestTimer);
-      searchRequestTimer = window.setTimeout(reloadGlobalSearch, 250);
     });
     searchInput.addEventListener("focus", function () {
       if (searchInput.value.trim()) loadSearchSuggestions();
@@ -1896,8 +1872,6 @@ document.addEventListener("DOMContentLoaded", function () {
       }
       if (event.key !== "Enter") return;
       event.preventDefault();
-      if (searchRequestTimer) window.clearTimeout(searchRequestTimer);
-      reloadGlobalSearch();
     });
   }
   document.addEventListener("click", function (event) {

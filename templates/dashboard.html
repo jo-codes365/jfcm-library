@@ -21,7 +21,7 @@
         </div>
         <div id="events-submenu" class="events-submenu">
           {% for event in sidebar_events %}
-          <a class="sidebar-link events-sublink {% if current_event and current_event.id == event.id %}active{% endif %}" href="{{ url_for('public_event_workspace', event_id=event.id, share_token=event.share_token) }}">{{ display_name(event.name) }}</a>
+          <a class="sidebar-link events-sublink {% if current_event and current_event.id == event.id %}active{% endif %}" href="{{ url_for('public_event_workspace', event_id=event.id, share_token=event.share_token) }}"><img class="sidebar-event-icon" src="{{ url_for('static', filename='images/' ~ event_icon_file(event.event_type)) }}" alt="">{{ display_name(event.name) }}</a>
           {% else %}
           <span class="sidebar-link events-sublink muted">No events yet</span>
           {% endfor %}
@@ -67,7 +67,7 @@
         </div>
         <div id="events-submenu" class="events-submenu">
           {% for event in sidebar_events %}
-          <a class="sidebar-link events-sublink {% if section == 'events' and event_id == event.id %}active{% endif %}" href="{{ url_for('dashboard', section='events', event=event.id) }}">{{ display_name(event.name) }}</a>
+          <a class="sidebar-link events-sublink {% if section == 'events' and event_id == event.id %}active{% endif %}" href="{{ url_for('dashboard', section='events', event=event.id) }}"><img class="sidebar-event-icon" src="{{ url_for('static', filename='images/' ~ event_icon_file(event.event_type)) }}" alt="">{{ display_name(event.name) }}</a>
           {% else %}
           <span class="sidebar-link events-sublink muted">No events yet</span>
           {% endfor %}
