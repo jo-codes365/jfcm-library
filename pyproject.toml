@@ -5,6 +5,7 @@ description = "JFCM Library Flask application packaged for Cloudflare Python Wor
 requires-python = ">=3.13"
 dependencies = [
     "Flask>=3.0,<4.0",
+    "gunicorn",
     "Flask-WTF>=1.2,<2.0",
     "mysql-connector-python>=9.0,<10.0",
     "python-dotenv>=1.0,<2.0",
