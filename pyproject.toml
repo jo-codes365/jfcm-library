@@ -5,14 +5,12 @@ description = "JFCM Library Flask application packaged for Cloudflare Python Wor
 requires-python = ">=3.13"
 dependencies = [
     "Flask>=3.0,<4.0",
-    "gunicorn",
     "Flask-WTF>=1.2,<2.0",
-    "mysql-connector-python>=9.0,<10.0",
+    "PyMySQL>=1.1,<2.0",
     "python-dotenv>=1.0,<2.0",
     "Werkzeug>=3.0,<4.0",
     "WTForms>=3.0,<4.0",
     "google-auth>=2.0,<3.0",
-    "PyMuPDF>=1.24.4,<2.0",
 ]
 
 [tool.setuptools]
@@ -22,4 +20,8 @@ py-modules = ["app", "worker"]
 dev = [
     "workers-py>=1.17.4",
     "workers-runtime-sdk>=1.9.0",
+]
+server = [
+    "gunicorn",
+    "PyMuPDF>=1.24.4,<2.0",
 ]

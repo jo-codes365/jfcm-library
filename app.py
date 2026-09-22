@@ -7,6 +7,7 @@ import secrets
 import shutil
 import smtplib
 import subprocess
+import sys
 import tempfile
 import uuid
 import zipfile
@@ -19,11 +20,11 @@ from datetime import date, datetime, timedelta
 from functools import wraps
 from pathlib import Path
 
-import mysql.connector
+import pymysql
 from dotenv import load_dotenv
 from flask import Flask, abort, flash, g, jsonify, redirect, render_template, request, send_file, send_from_directory, session, url_for
 from flask_wtf.csrf import CSRFProtect
-from mysql.connector import Error as MySQLError
+from pymysql.err import MySQLError
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
@@ -31,6 +32,7 @@ from werkzeug.utils import secure_filename
 
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
+IS_CLOUDFLARE_WORKER = sys.platform == "emscripten"
 
 
 def env_int(name, default):
@@ -126,16 +128,49 @@ def send_welcome_email(email, subject="Welcome to JFCM Pila"):
 
 
 
+class DatabaseConnection:
+    """Keep the application's existing mysql-connector cursor API on PyMySQL."""
+
+    def __init__(self, connection):
+        self._connection = connection
+
+    def cursor(self, dictionary=False):
+        cursor_class = pymysql.cursors.DictCursor if dictionary else pymysql.cursors.Cursor
+        return self._connection.cursor(cursor_class)
+
+    def is_connected(self):
+        return bool(self._connection.open)
+
+    def __getattr__(self, name):
+        return getattr(self._connection, name)
+
+
+def database_connection_options():
+    if IS_CLOUDFLARE_WORKER:
+        worker_env = request.environ.get("workers.env")
+        hyperdrive = getattr(worker_env, "HYPERDRIVE", None)
+        if hyperdrive is None:
+            raise RuntimeError("The HYPERDRIVE binding is required for MySQL connections in Cloudflare Workers.")
+        return {
+            "host": hyperdrive.host,
+            "port": int(hyperdrive.port),
+            "user": hyperdrive.user,
+            "password": hyperdrive.password,
+            "database": hyperdrive.database,
+            "ssl": None,
+        }
+    return {
+        "host": os.getenv("MYSQLHOST"),
+        "port": int(os.getenv("MYSQLPORT", 3306)),
+        "user": os.getenv("MYSQLUSER"),
+        "password": os.getenv("MYSQLPASSWORD"),
+        "database": os.getenv("MYSQLDATABASE"),
+    }
+
+
 def get_db():
     if "db" not in g:
-        g.db = mysql.connector.connect(
-            host=os.getenv("MYSQLHOST"),
-            port=int(os.getenv("MYSQLPORT", 3306)),
-            user=os.getenv("MYSQLUSER"),
-            password=os.getenv("MYSQLPASSWORD"),
-            database=os.getenv("MYSQLDATABASE"),
-            autocommit=False,
-            )
+        g.db = DatabaseConnection(pymysql.connect(autocommit=False, **database_connection_options()))
     return g.db
 
 
@@ -911,13 +946,14 @@ def log_libreoffice_path_debug():
     )
 
 
-log_libreoffice_path_debug()
-try:
-    libreoffice_binary()
-except PresentationPreviewError:
-    # Presentation requests will return a clear 503 while the rest of the
-    # file service remains available.
-    pass
+if not IS_CLOUDFLARE_WORKER:
+    log_libreoffice_path_debug()
+    try:
+        libreoffice_binary()
+    except PresentationPreviewError:
+        # Presentation requests will return a clear 503 while the rest of the
+        # file service remains available.
+        pass
 
 
 def presentation_fallback_files(record):
@@ -1344,6 +1380,11 @@ def copy_prerendered_png_steps(step_groups, cache_directory):
 
 def render_presentation_preview(record):
     """Render via LibreOffice/PDF so the browser only scales finished slide pixels."""
+    if IS_CLOUDFLARE_WORKER:
+        raise PresentationPreviewError(
+            "Server-side PowerPoint rendering is unavailable in Cloudflare Workers. "
+            "Use pre-rendered slide images from Worker-compatible storage or download the original presentation."
+        )
     cache_directory = presentation_preview_cache(record)
     manifest_path = cache_directory / "manifest.json"
     if manifest_path.is_file():
