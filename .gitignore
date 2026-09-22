@@ -1,5 +1,7 @@
 .env
 .venv/
+.venv-workers/
+python_modules/
 __pycache__/
 *.py[cod]
 uploads/*
