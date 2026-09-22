@@ -474,6 +474,46 @@ def folder_is_within(folder_id, root_folder_id):
     return any(folder["id"] == root_folder_id for folder in folder_chain(folder_id))
 
 
+def public_folder_breadcrumbs(current_folder, owner_id, event_id=None, root_folder_id=None):
+    """Return a verified public-folder path, or ``None`` for an invalid path.
+
+    Public views must derive navigation from the stored parent relationship.  In
+    particular, do not follow a parent from another owner or Event merely
+    because its id exists.  Library folder links stop at their shared root;
+    Event folders stop at the Event root.
+    """
+    breadcrumbs = []
+    node = current_folder
+    seen = set()
+
+    while node:
+        if (
+            node["id"] in seen
+            or node.get("user_id") != owner_id
+            or node.get("event_id") != event_id
+        ):
+            return None
+        seen.add(node["id"])
+        breadcrumbs.append(node)
+
+        if root_folder_id is not None and node["id"] == root_folder_id:
+            break
+        if node.get("parent_id") is None:
+            break
+        node = folder_record(node["parent_id"])
+    else:
+        return None
+
+    if root_folder_id is not None:
+        if not breadcrumbs or breadcrumbs[-1]["id"] != root_folder_id:
+            return None
+    elif breadcrumbs[-1].get("parent_id") is not None:
+        return None
+
+    breadcrumbs.reverse()
+    return breadcrumbs
+
+
 def share_context_from_token(kind, share_token):
     current_user_id = session.get("user_id")
     if kind == "file":
@@ -2349,17 +2389,24 @@ def public_events():
 
 
 def public_dashboard():
-    """Render active resources with public tokens in a read-only workspace."""
+    """Render public Library roots in a read-only workspace.
+
+    Nested folders and their files are deliberately not flattened here.  They
+    are loaded from their actual parent folder by ``public_folder`` so public
+    navigation mirrors the stored Library hierarchy.
+    """
     cursor = get_db().cursor(dictionary=True)
     try:
         cursor.execute(
-            "SELECT id, name, share_token, created_at FROM folders "
-            "WHERE is_deleted = FALSE AND event_id IS NULL AND share_token IS NOT NULL ORDER BY created_at DESC"
+            "SELECT id, user_id, name, parent_id, share_token, created_at FROM folders "
+            "WHERE is_deleted = FALSE AND event_id IS NULL AND parent_id IS NULL "
+            "AND share_token IS NOT NULL AND share_token <> '' ORDER BY created_at DESC"
         )
         folders = cursor.fetchall()
         cursor.execute(
-            "SELECT id, original_filename, file_size, mime_type, share_token, uploaded_at FROM files "
-            "WHERE is_deleted = FALSE AND share_token IS NOT NULL ORDER BY uploaded_at DESC"
+            "SELECT id, user_id, original_filename, folder_id, event_id, file_size, mime_type, share_token, uploaded_at FROM files "
+            "WHERE is_deleted = FALSE AND event_id IS NULL AND folder_id IS NULL "
+            "AND share_token IS NOT NULL AND share_token <> '' ORDER BY uploaded_at DESC"
         )
         files = cursor.fetchall()
     except MySQLError:
@@ -2369,10 +2416,10 @@ def public_dashboard():
         cursor.close()
 
     items = (
-        [{"kind": "folder", "name": item["name"], "parent_id": None, "size": 0, "file_size": 0,
+        [{"kind": "folder", "name": item["name"], "size": 0, "file_size": 0,
           "mime_type": "Folder", "location": "Public Files", "date": item["created_at"], "accessed_at": None,
           "is_starred": False, **item} for item in folders]
-        + [{"kind": "file", "name": item["original_filename"], "parent_id": None, "folder_id": None,
+        + [{"kind": "file", "name": item["original_filename"], "parent_id": item["folder_id"],
             "location": "Public Files", "date": item["uploaded_at"], "accessed_at": None, "is_starred": False,
             **item} for item in files]
     )
@@ -3709,14 +3756,14 @@ def public_folder(share_token):
     if not current_folder or current_folder.get("event_id") is not None:
         abort(404)
 
-    breadcrumbs = []
-    node = current_folder
-    while node:
-        breadcrumbs.append(node)
-        if node["id"] == share_context["item_id"] or not node["parent_id"]:
-            break
-        node = folder_record(node["parent_id"])
-    breadcrumbs.reverse()
+    breadcrumbs = public_folder_breadcrumbs(
+        current_folder,
+        share_context["owner_id"],
+        event_id=None,
+        root_folder_id=share_context["item_id"],
+    )
+    if breadcrumbs is None:
+        abort(404)
 
     cursor = get_db().cursor(dictionary=True)
     try:
@@ -3841,13 +3888,13 @@ def render_public_event_workspace(event_id, share_context):
         current_folder = accessible_folder(current_folder_id, share_context=share_context)
         if not current_folder or current_folder.get("event_id") != event_id:
             abort(404)
-        node = current_folder
-        while node:
-            if node.get("event_id") != event_id or node.get("user_id") != share_context["owner_id"]:
-                abort(404)
-            breadcrumbs.append(node)
-            node = folder_record(node["parent_id"]) if node["parent_id"] else None
-        breadcrumbs.reverse()
+        breadcrumbs = public_folder_breadcrumbs(
+            current_folder,
+            share_context["owner_id"],
+            event_id=event_id,
+        )
+        if breadcrumbs is None:
+            abort(404)
 
     cursor = get_db().cursor(dictionary=True)
     try:
